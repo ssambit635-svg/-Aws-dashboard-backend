@@ -51,10 +51,43 @@ fi
 
 echo "python: $PYTHON"
 
+# ── Node version gate ──────────────────────────────────────────────────────
+# jsdom 30 requires Node ^22.22.2 || ^24.15.0 || >=26. On Node 20 its undici
+# dependency throws "Cannot read properties of undefined (reading 'bind')" at
+# import time, which reads like a bug in this repository rather than in the
+# toolchain. Check up front and say so.
+if ! command -v node >/dev/null 2>&1; then
+  echo "node is required for the dashboard tests (>= 22.22.2)." >&2
+  exit 1
+fi
+
+NODE_VERSION="$(node --version)"
+NODE_MAJOR="${NODE_VERSION#v}"
+NODE_MAJOR="${NODE_MAJOR%%.*}"
+if [ "$NODE_MAJOR" -lt 22 ]; then
+  cat >&2 <<MSG
+Node ${NODE_VERSION} is too old for the dashboard tests.
+
+  jsdom 30 requires Node ^22.22.2 || ^24.15.0 || >=26.
+  Install a current LTS (https://nodejs.org) or use nvm:
+
+    nvm install 22 && nvm use 22
+
+  The Python test suite does not need Node at all:  make test
+MSG
+  exit 1
+fi
+
 # ── Node dependencies (gitignored, so install on first run) ────────────────
 if [ ! -d tests/js/node_modules ]; then
   echo "installing dashboard test dependencies…"
-  npm --prefix tests/js install --silent
+  if [ -f tests/js/package-lock.json ]; then
+    # npm ci installs exactly the locked tree; falls back to install if the
+    # lockfile and manifest disagree.
+    npm --prefix tests/js ci --silent 2>/dev/null || npm --prefix tests/js install --silent
+  else
+    npm --prefix tests/js install --silent
+  fi
 fi
 
 # ── Server lifetime ────────────────────────────────────────────────────────

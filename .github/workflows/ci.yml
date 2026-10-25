@@ -66,10 +66,13 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
+      # jsdom 30 requires Node ^22.22.2 || ^24.15.0 || >=26 (its undici
+      # dependency throws at import time on Node 20). Keep this in step with
+      # tests/js/package.json `engines`.
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Install runtime dependencies
         run: pip install -r requirements.txt

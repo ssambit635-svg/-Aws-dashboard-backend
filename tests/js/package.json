@@ -8,6 +8,9 @@
     "test": "node dashboard.test.mjs"
   },
   "devDependencies": {
-    "jsdom": "^30.1.3"
+    "jsdom": "30.1.3"
+  },
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
   }
 }

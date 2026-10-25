@@ -287,6 +287,11 @@ of DOM code are exactly as likely to break as the backend:
 make test-ui     # 49 checks; installs jsdom on first run, starts its own server
 ```
 
+Requires **Node 22.22+** (or 24.15+): `jsdom@30` declares those engines and its
+`undici` dependency throws at import time on Node 20. The harness pins jsdom and
+commits a lockfile so CI and local runs install the same tree. The Python suite
+needs no Node at all.
+
 `tests/js/dashboard.test.mjs` executes the real `index.html`, CSS and JavaScript
 in **jsdom** against a live instance of the API — no Chromium download, no
 display server, a few seconds per run — and asserts in four suites:
