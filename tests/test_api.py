@@ -203,6 +203,14 @@ def test_billing_period_is_current_month(authed):
     assert start <= date.fromisoformat(body["period_end"])
 
 
+def test_billing_rows_expose_usage_quantity_not_hours(authed):
+    """Cost Explorer's UsageQuantity is mixed-unit; calling it 'hours' was a lie."""
+    row = authed.get("/api/v1/billing/summary").json()["data"]["services"][0]
+    assert "usage_quantity" in row
+    assert "usage_hours" not in row
+    assert row["usage_quantity"] >= 0
+
+
 def test_services_sorted_by_cost_desc(authed):
     services = authed.get("/api/v1/billing/summary").json()["data"]["services"]
     costs = [float(row["cost"]["amount"]) for row in services]
@@ -293,6 +301,18 @@ def test_gzip_applied_to_large_payloads(authed):
     response = authed.get("/api/v1/instances?page_size=100", headers={"Accept-Encoding": "gzip"})
     assert response.status_code == 200
     assert response.headers.get("content-encoding") == "gzip"
+
+
+def test_vary_header_advertises_compression(authed):
+    """Without Vary a shared cache can serve gzip to a client that cannot read it."""
+    response = authed.get("/api/v1/buckets", headers={"Accept-Encoding": "gzip"})
+    assert "accept-encoding" in response.headers.get("vary", "").lower()
+
+
+def test_cors_exposes_the_request_id_header(authed):
+    response = authed.get("/api/v1/overview", headers={"Origin": "http://localhost:8000"})
+    exposed = response.headers.get("access-control-expose-headers", "").lower()
+    assert "x-request-id" in exposed
 
 
 # ── provider failure handling ─────────────────────────────────────────────

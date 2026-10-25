@@ -257,9 +257,8 @@ class MockProvider(CloudProvider):
         span_days = max((end - start).days + 1, 1)
         month_days = 30
         baselines = self._baselines()
-        sum(baselines.values())
         proration = Decimal(str(round(span_days / month_days, 6)))
-        staged: list[tuple[str, Decimal, Decimal, float, int]] = []
+        staged: list[tuple[str, Decimal, Decimal, float, float]] = []
         for service, base in baselines.items():
             rng = _rng("cost", service, start.isoformat(), end.isoformat())
             cost = base * proration
@@ -283,10 +282,10 @@ class MockProvider(CloudProvider):
                 cost=Money.usd(cost),
                 projected=Money.usd(projected),
                 delta_pct=delta,
-                usage_hours=hours,
+                usage_quantity=quantity,
                 share_pct=round(float(cost / period_total) * 100, 1),
             )
-            for service, cost, projected, delta, hours in staged
+            for service, cost, projected, delta, quantity in staged
         ]
         rows.sort(key=lambda r: r.cost.amount, reverse=True)
         return rows
