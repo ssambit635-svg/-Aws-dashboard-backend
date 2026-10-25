@@ -1,0 +1,65 @@
+"""Liveness and readiness probes (unauthenticated, by design).
+
+Kubernetes/ECS need these reachable without credentials. ``/livez`` never
+touches the network; ``/readyz`` reports whether the data source is usable.
+"""
+
+from __future__ import annotations
+
+import time
+
+from fastapi import APIRouter, Depends, Response, status
+
+from app.core.config import Settings, get_settings
+from app.models.common import HealthStatus, ProviderInfo
+from app.services.container import Container, get_container
+
+router = APIRouter(tags=["health"])
+_STARTED_AT = time.time()
+
+
+@router.get("/livez", summary="Liveness probe")
+def livez() -> dict[str, str]:
+    """Process is up. No dependencies touched."""
+    return {"status": "alive"}
+
+
+@router.get("/readyz", summary="Readiness probe", response_model=HealthStatus)
+def readyz(
+    response: Response,
+    ctr: Container = Depends(get_container),
+    settings: Settings = Depends(get_settings),
+) -> HealthStatus:
+    checks = ctr.provider.health()
+    healthy = checks.get("provider") == "ok"
+    if not healthy:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    return HealthStatus(
+        status="ready" if healthy else "degraded",
+        version=settings.version,
+        provider=ctr.info.mode,
+        region=settings.aws_region,
+        uptime_seconds=round(time.time() - _STARTED_AT, 2),
+        checks=checks,
+    )
+
+
+@router.get("/api/v1/system/info", summary="Runtime configuration and provider state")
+def system_info(ctr: Container = Depends(get_container)) -> dict:
+    info: ProviderInfo = ctr.info
+    return {
+        "settings": ctr.settings.public_fingerprint(),
+        "provider": info.model_dump(),
+        "cache": ctr.cache.stats.as_dict(),
+        "endpoints": [
+            "/api/v1/overview",
+            "/api/v1/buckets",
+            "/api/v1/instances",
+            "/api/v1/alarms",
+            "/api/v1/billing/summary",
+            "/api/v1/billing/trend",
+            "/api/v1/billing/forecast",
+            "/livez",
+            "/readyz",
+        ],
+    }
