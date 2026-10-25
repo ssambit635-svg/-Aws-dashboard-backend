@@ -3,7 +3,7 @@
 [![CI](https://github.com/ssambit635-svg/-Aws-dashboard-backend/actions/workflows/ci.yml/badge.svg)](https://github.com/ssambit635-svg/-Aws-dashboard-backend/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-3776AB?logo=python&logoColor=white)](https://www.python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2dd4bf.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-196%20%2B%2049%20DOM-34d399.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-210%20%2B%2054%20DOM-34d399.svg)](#testing)
 
 A production-shaped, read-only **AWS control-plane API** with a zero-dependency
 observability dashboard. It reads real account state through **boto3** —
@@ -58,7 +58,7 @@ read if you are reviewing the repository.
 | --- | --- | --- |
 | **AWS integration** | `boto3` clients for S3, EC2, CloudWatch and Cost Explorer with bounded retries, explicit timeouts, paginators, and per-service error translation | Real cloud SDK usage, not a mock-up |
 | **Service architecture** | `providers/` (data sources) → `services/` (business logic) → `routers/` (HTTP). Routers contain no logic; providers know nothing about HTTP | Layered design, separation of concerns, dependency inversion |
-| **Testability** | The `CloudProvider` ABC lets the service layer run against fixtures, while the boto3 provider is verified with `botocore`'s `Stubber` against recorded AWS payloads. 196 tests, no network, no credentials | Designing for tests instead of bolting them on, and knowing how to test SDK code |
+| **Testability** | The `CloudProvider` ABC lets the service layer run against fixtures, while the boto3 provider is verified with `botocore`'s `Stubber` against recorded AWS payloads. 210 tests, no network, no credentials | Designing for tests instead of bolting them on, and knowing how to test SDK code |
 | **API design** | Typed Pydantic v2 models for every request and response; consistent `{data, meta}` envelope; cursor-free offset pagination; HTTP-semantic status codes | Contract-first API design, OpenAPI schema generation |
 | **Correctness** | Money is `Decimal`, never `float`; ISO-8601 dates; validated AWS ID formats; aggregates computed over the full set, not the current page | Attention to the details that actually break billing systems |
 | **Reliability** | TTL read-through cache, `/livez` + `/readyz` probes, typed error envelopes, graceful degradation on partial AWS failures, structured JSON logs with request IDs | Operability — the difference between a demo and a service |
@@ -284,7 +284,7 @@ rather than a fallback — the right setting for production.
 ## Testing
 
 ```bash
-make test        # 196 tests, ~2s, no network
+make test        # 210 tests, ~2s, no network
 make test-ui     # 49 dashboard checks in jsdom
 make cov         # coverage report
 make check       # lint + format + types + tests (fast, no node)

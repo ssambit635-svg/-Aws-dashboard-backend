@@ -285,3 +285,42 @@ rather than at 2 a.m. in a Render log. The cost is one script and 16 tests, and
 the smoke script duplicates a little of what the API tests already assert — a
 deliberate trade, because it verifies the *shipped artefact*, not the source
 tree.
+
+---
+
+## ADR-015 — The `hidden` attribute is guarded in CSS, and tested there
+
+**Status:** accepted
+
+**Context.** The deployed dashboard opened with both full-screen overlays
+permanently visible, stacked on top of the page. The visible symptom was a black
+screen and a keyboard-shortcuts dialog whose close button, backdrop click and
+`Esc` all did nothing — the JS ran, set `hidden = true`, and the element stayed
+on screen.
+
+`hidden` is only a **user-agent** stylesheet rule (`[hidden] { display: none }`).
+Author declarations beat UA ones, and `.overlay` sets `display: grid` (and
+`.errorbar` sets `display: flex`), so the attribute had no effect. Every
+`el.hidden = true` in the codebase was decorative.
+
+The 49 jsdom checks passed throughout: the harness never loads `app.css`, and
+jsdom special-cases the `hidden` attribute rather than resolving the cascade, so
+it reports `display: none` for the same markup a browser renders.
+
+**Decision.** One guarded rule, placed before any component styles:
+
+```css
+[hidden] { display: none !important; }
+```
+
+`tests/test_dashboard_css.py` enforces it three ways: the guard must exist, every
+element the HTML hides by default must be protected, and the overlays must be
+mutually exclusive in the JS. `render_smoke.py` additionally asserts the guard is
+present in the **served** stylesheet, so a stale deploy cannot pass. jsdom gains
+behavioural checks for open/close exclusivity.
+
+**Consequences.** A total, browser-only failure is now covered by tests that do
+not need a browser. The remaining gap is honest and documented: jsdom cannot
+resolve the CSS cascade, so layout-level regressions are still caught by reading
+the stylesheet, not by rendering it. Adding a real browser engine to CI would
+close it; that is a larger dependency than this project currently justifies.

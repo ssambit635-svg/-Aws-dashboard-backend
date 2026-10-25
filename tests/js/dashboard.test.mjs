@@ -152,6 +152,34 @@ async function interactionSuite() {
   await sleep(60);
   check("Escape closes the shortcuts dialog", document.getElementById("shortcuts").hidden);
 
+  // Full-screen overlays must never be open together: stacking them leaves the
+  // user inside a modal they cannot dismiss, which is exactly what a CSS cascade
+  // bug produced in the browser while these DOM tests happily passed.
+  document.getElementById("btn-shortcuts").click();
+  check("shortcuts button opens the dialog", !document.getElementById("shortcuts").hidden);
+  document.getElementById("btn-palette").click();
+  check(
+    "opening the palette closes the shortcuts dialog",
+    document.getElementById("shortcuts").hidden
+  );
+  document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  document.getElementById("btn-shortcuts").click();
+  check(
+    "opening the shortcuts dialog closes the palette",
+    document.getElementById("palette").hidden && !document.getElementById("shortcuts").hidden
+  );
+  document.getElementById("btn-shortcuts-close").click();
+  check("the close button dismisses the dialog", document.getElementById("shortcuts").hidden);
+  check(
+    "the backdrop closes the dialog",
+    (() => {
+      document.getElementById("btn-shortcuts").click();
+      const overlay = document.getElementById("shortcuts");
+      overlay.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      return overlay.hidden;
+    })()
+  );
+
   // auto-refresh toggle keeps aria-pressed truthful through the palette
   const liveButton = document.getElementById("btn-toggle-live");
   const initial = liveButton.getAttribute("aria-pressed");

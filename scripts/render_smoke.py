@@ -120,9 +120,27 @@ def smoke(base: str, expect_key: str | None) -> list[Result]:
         assets = sorted(set(re.findall(r'(?:src|href)="(/static/[^"]+)"', page)))
         results.append(Result("page references static assets", bool(assets)))
         for asset in assets:
-            asset_status, _, asset_headers = get(base + asset)
+            asset_status, asset_body, asset_headers = get(base + asset)
             ok = asset_status == 200 and len(asset_headers.get("content-type", "")) > 0
             results.append(Result(f"asset {asset}", ok, f"status {asset_status}"))
+            if asset.endswith(".css") and ok:
+                # Without this guard, `[hidden]` loses to the author's
+                # `display: grid` on .overlay and the whole dashboard is covered
+                # by invisible overlays. A stale deploy would still serve the
+                # broken stylesheet, so verify the one that is actually served.
+                has_guard = re.search(
+                    r"\[hidden\]\s*\{[^}]*display\s*:\s*none\s*!important",
+                    asset_body.decode("utf-8", "replace"),
+                )
+                results.append(
+                    Result(
+                        "stylesheets guard the hidden attribute",
+                        bool(has_guard),
+                        ""
+                        if has_guard
+                        else f"{asset} is missing [hidden] {{ display: none !important }}",
+                    )
+                )
 
     check_status(results, base, "/docs")
     status, schema_body, _ = check_status(results, base, "/openapi.json")
