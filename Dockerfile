@@ -40,11 +40,14 @@ COPY --chown=app:app app ./app
 
 USER app
 
+# EXPOSE is documentation only. The port actually bound comes from $PORT
+# (Render, Fly, Cloud Run and ECS all inject their own), which is why both the
+# healthcheck above and the CMD below read it rather than assuming 8000.
 EXPOSE 8000
 
 # Kubernetes-style probes hit /livez and /readyz; this is for plain Docker.
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/livez', timeout=2).status == 200 else 1)"
+    CMD python -c "import os,sys,urllib.request; port=os.environ.get('PORT','8000'); url=f'http://127.0.0.1:{port}/livez'; sys.exit(0 if urllib.request.urlopen(url, timeout=2).status == 200 else 1)"
 
 # One worker per container: scale by adding replicas, not threads. The in-process
 # cache is per-worker, which is correct for a read-through cache at this size.

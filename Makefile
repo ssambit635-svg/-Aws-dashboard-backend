@@ -7,7 +7,7 @@ BIN := $(VENV)/bin
 PORT ?= 8000
 
 .DEFAULT_GOAL := help
-.PHONY: help venv install run dev test test-ui cov lint format format-check typecheck check check-all docker-build docker-run docker-run-public clean
+.PHONY: help venv install run dev test test-ui cov lint format format-check typecheck check check-all docker-build docker-run docker-run-public render-check clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -63,6 +63,9 @@ docker-run: ## Run the container locally (demo mode, no credentials needed)
 		-e DASH_ENVIRONMENT=local \
 		-e DASH_BOOTSTRAP_DASHBOARD=true \
 		cloud-control-api:1.0.0
+
+render-check: ## Verify the app works in a PaaS shape (PORT≠8000, production)
+	$(PYTHON) scripts/render_smoke.py --boot
 
 docker-run-public: ## Run the container in the public read-only demo shape
 	docker run --rm -p $(PORT):8000 \
