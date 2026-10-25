@@ -44,11 +44,13 @@ include = ["app*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q --strict-markers --strict-config"
+# Starlette ships its own warning class, and it subclasses UserWarning rather
+# than DeprecationWarning — filtering on DeprecationWarning silently misses it.
+# Both are third-party notices we cannot act on, so they are suppressed by
+# class rather than by message.
 filterwarnings = [
+    "ignore::starlette.exceptions.StarletteDeprecationWarning",
     "ignore::DeprecationWarning:starlette.*",
-    "ignore::DeprecationWarning:fastapi.testclient.*",
-    "ignore:Using `httpx` with `starlette.testclient`.*:DeprecationWarning",
-    "ignore:'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated.*:DeprecationWarning",
 ]
 
 [tool.ruff]

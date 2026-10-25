@@ -65,6 +65,22 @@ def test_auth_can_be_disabled():
     assert settings.effective_api_key is None
 
 
+# ── .env.example stays honest ─────────────────────────────────────────────
+def test_env_example_documents_only_real_settings():
+    """A stale key in .env.example silently does nothing when a user sets it."""
+    import re
+    from pathlib import Path
+
+    example = Path(".env.example").read_text(encoding="utf-8")
+    documented = {
+        match.group(1).lower().replace("dash_", "")
+        for match in re.finditer(r"^#?\s*(DASH_[A-Z_]+)=", example, re.MULTILINE)
+    }
+    assert documented, "no DASH_ variables parsed from .env.example"
+    unknown = documented - set(Settings.model_fields)
+    assert not unknown, f".env.example documents settings that do not exist: {sorted(unknown)}"
+
+
 # ── constant-time comparison ──────────────────────────────────────────────
 def test_compare_digest_matching():
     assert _matches("abc123", "abc123") is True

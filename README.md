@@ -1,5 +1,10 @@
 # Cloud Control — AWS Observability API & Dashboard
 
+[![CI](https://github.com/ssambit635-svg/-Aws-dashboard-backend/actions/workflows/ci.yml/badge.svg)](https://github.com/ssambit635-svg/-Aws-dashboard-backend/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-3776AB?logo=python&logoColor=white)](https://www.python.org)
+[![License: MIT](https://img.shields.io/badge/license-MIT-2dd4bf.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-172%20%2B%2049%20DOM-34d399.svg)](#testing)
+
 A production-shaped, read-only **AWS control-plane API** with a zero-dependency
 observability dashboard. It reads real account state through **boto3** —
 S3 inventory, EC2 fleet, CloudWatch alarms and Cost Explorer — behind a
@@ -20,6 +25,26 @@ uvicorn app.main:app --reload
 # → http://localhost:8000/docs   OpenAPI / Swagger UI
 ```
 
+**Reviewing this in a hurry?** Three things are worth your time, in order:
+[what it demonstrates](#what-this-project-demonstrates) (feature → skill map),
+[`app/providers/aws.py`](app/providers/aws.py) (the real AWS work), and
+[`tests/test_aws_provider.py`](tests/test_aws_provider.py) (how SDK code is
+tested without an AWS account).
+
+---
+
+## Contents
+
+- [What this project demonstrates](#what-this-project-demonstrates)
+- [Features](#features)
+- [Configuration](#configuration) · [AWS permissions](#required-aws-permissions)
+- [API examples](#api-examples)
+- [Architecture](#architecture)
+- [Why the demo provider exists](#why-the-demo-provider-exists)
+- [Testing](#testing)
+- [Docker](#docker)
+- [Known limitations](#known-limitations) · [Roadmap](#roadmap)
+
 ---
 
 ## What this project demonstrates
@@ -31,7 +56,7 @@ read if you are reviewing the repository.
 | --- | --- | --- |
 | **AWS integration** | `boto3` clients for S3, EC2, CloudWatch and Cost Explorer with bounded retries, explicit timeouts, paginators, and per-service error translation | Real cloud SDK usage, not a mock-up |
 | **Service architecture** | `providers/` (data sources) → `services/` (business logic) → `routers/` (HTTP). Routers contain no logic; providers know nothing about HTTP | Layered design, separation of concerns, dependency inversion |
-| **Testability** | The `CloudProvider` ABC lets the service layer run against fixtures, while the boto3 provider is verified with `botocore`'s `Stubber` against recorded AWS payloads. 167 tests, no network, no credentials | Designing for tests instead of bolting them on, and knowing how to test SDK code |
+| **Testability** | The `CloudProvider` ABC lets the service layer run against fixtures, while the boto3 provider is verified with `botocore`'s `Stubber` against recorded AWS payloads. 172 tests, no network, no credentials | Designing for tests instead of bolting them on, and knowing how to test SDK code |
 | **API design** | Typed Pydantic v2 models for every request and response; consistent `{data, meta}` envelope; cursor-free offset pagination; HTTP-semantic status codes | Contract-first API design, OpenAPI schema generation |
 | **Correctness** | Money is `Decimal`, never `float`; ISO-8601 dates; validated AWS ID formats; aggregates computed over the full set, not the current page | Attention to the details that actually break billing systems |
 | **Reliability** | TTL read-through cache, `/livez` + `/readyz` probes, typed error envelopes, graceful degradation on partial AWS failures, structured JSON logs with request IDs | Operability — the difference between a demo and a service |
@@ -54,8 +79,8 @@ read if you are reviewing the repository.
 - `GET /api/v1/billing/summary` — month-to-date unblended cost by service, projected, budget tracking
 - `GET /api/v1/billing/trend?days=30` — daily cost, grouped by service
 - `GET /api/v1/billing/forecast` — Cost Explorer month-end forecast vs. budget
-- `GET /api/v1/system/info` — runtime config, active provider and cache statistics
-- `GET /livez`, `GET /readyz` — probes that never require credentials
+- `GET /api/v1/system/info` — runtime config, active provider and cache statistics *(authenticated)*
+- `GET /livez`, `GET /readyz` — probes that never require credentials, so an orchestrator can reach them; every `/api/v1/*` route is authenticated
 
 **Dashboard**
 
@@ -86,7 +111,7 @@ All settings are environment variables with the `DASH_` prefix (see
 | `DASH_MONTHLY_BUDGET` | `8000` | Budget baseline for gauges and burn rate |
 | `DASH_CACHE_TTL_SECONDS` | `60` | Read-through cache TTL |
 | `DASH_CORS_ORIGINS` | `http://localhost:8000` | Comma-separated allowlist |
-| `DASH_MONTHLY_BUDGET`, `DASH_LOG_LEVEL`, … | | see `.env.example` |
+| `DASH_LOG_LEVEL` | `INFO` | Log verbosity; logs are structured JSON |
 
 Generate a real key with:
 
@@ -257,7 +282,7 @@ rather than a fallback — the right setting for production.
 ## Testing
 
 ```bash
-make test        # 167 tests, ~2s, no network
+make test        # 172 tests, ~2s, no network
 make test-ui     # 49 dashboard checks in jsdom
 make cov         # coverage report
 make check       # lint + format + types + tests (fast, no node)

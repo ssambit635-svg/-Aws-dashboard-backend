@@ -10,6 +10,7 @@ from app.core.errors import ProviderUnavailableError
 from tests.conftest import API_KEY
 
 PROTECTED = [
+    "/api/v1/system/info",
     "/api/v1/overview",
     "/api/v1/buckets",
     "/api/v1/instances",
@@ -61,6 +62,12 @@ def test_protected_routes_accept_valid_key(client, path):
 def test_bearer_token_is_accepted(client):
     response = client.get("/api/v1/overview", headers={"Authorization": f"Bearer {API_KEY}"})
     assert response.status_code == 200
+
+
+def test_probes_stay_public(client):
+    """An orchestrator must be able to probe without holding an API key."""
+    assert client.get("/livez").status_code == 200
+    assert client.get("/readyz").status_code == 200
 
 
 def test_docs_are_public(authed):

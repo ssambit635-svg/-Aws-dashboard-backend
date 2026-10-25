@@ -11,6 +11,7 @@ import time
 from fastapi import APIRouter, Depends, Response, status
 
 from app.core.config import Settings, get_settings
+from app.core.security import require_api_key
 from app.models.common import HealthStatus, ProviderInfo
 from app.services.container import Container, get_container
 
@@ -48,7 +49,15 @@ def readyz(
     )
 
 
-@router.get("/api/v1/system/info", summary="Runtime configuration and provider state")
+@router.get(
+    "/api/v1/system/info",
+    summary="Runtime configuration and provider state",
+    # Under /api/v1, so it is protected like the rest of the API. It reports
+    # environment, region, budget and cache statistics — not secrets, but not
+    # something to hand to an anonymous caller either. The probes below stay
+    # public so an orchestrator can reach them without credentials.
+    dependencies=[Depends(require_api_key)],
+)
 def system_info(ctr: Container = Depends(get_container)) -> dict:
     info: ProviderInfo = ctr.info
     return {
