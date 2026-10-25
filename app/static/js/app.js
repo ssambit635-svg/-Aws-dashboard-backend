@@ -1114,10 +1114,10 @@
     bindPalette();
     bindShortcuts();
 
-    if (!API.hasKey()) {
-      showError("No API key configured. Press “Set API key” from ⌘K, or reload with ?key=YOUR_KEY.");
-    }
-
+    // No pre-emptive "missing key" banner: on a deployment with auth disabled
+    // there is no key and nothing is wrong, so the message would flash for a
+    // moment and then be cleared. The 401 path below is the honest place to
+    // surface it, because that is when a key is actually required.
     loadAll();
   }
 

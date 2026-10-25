@@ -105,10 +105,44 @@ jobs:
           curl -sf -H "X-API-Key: ci-test-key" http://localhost:8000/api/v1/overview > /dev/null
           curl -sf http://localhost:8000/ | grep -q "Cloud Control"
 
+      # The deployment contract: production + the repository's development key
+      # must be refused at startup, not served.
+      - name: Default key is refused in production
+        run: |
+          set +e
+          output=$(docker run --rm -e DASH_ENVIRONMENT=production cloud-control-api:ci 2>&1)
+          status=$?
+          set -e
+          echo "$output" | tail -5
+          if [ "$status" -eq 0 ]; then
+            echo "::error::container started in production with the default API key"
+            exit 1
+          fi
+          echo "$output" | grep -q "DASH_API_KEY is still the development default"
+
+      # And the public demo shape must boot with no credentials and no secret.
+      - name: Public demo shape serves without a key
+        run: |
+          docker run -d --name cc-public -p 8001:8000 \
+            -e DASH_ENVIRONMENT=production \
+            -e DASH_AUTH_ENABLED=false \
+            -e DASH_PROVIDER_MODE=mock \
+            cloud-control-api:ci
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8001/livez > /dev/null; then break; fi
+            sleep 1
+          done
+          curl -sf http://localhost:8001/api/v1/overview > /dev/null
+          # The dev key must not leak into page source on a production deploy.
+          if curl -s http://localhost:8001/ | grep -q "local-dev-key"; then
+            echo "::error::the development API key is present in the served page"
+            exit 1
+          fi
+
       - name: Container logs
         if: failure()
-        run: docker logs cc
+        run: docker logs cc; docker logs cc-public || true
 
       - name: Tear down
         if: always()
-        run: docker rm -f cc || true
+        run: docker rm -f cc cc-public || true

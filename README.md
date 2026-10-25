@@ -3,17 +3,19 @@
 [![CI](https://github.com/ssambit635-svg/-Aws-dashboard-backend/actions/workflows/ci.yml/badge.svg)](https://github.com/ssambit635-svg/-Aws-dashboard-backend/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-3776AB?logo=python&logoColor=white)](https://www.python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2dd4bf.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-172%20%2B%2049%20DOM-34d399.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-180%20%2B%2049%20DOM-34d399.svg)](#testing)
 
 A production-shaped, read-only **AWS control-plane API** with a zero-dependency
 observability dashboard. It reads real account state through **boto3** —
 S3 inventory, EC2 fleet, CloudWatch alarms and Cost Explorer — behind a
 validated, cached, authenticated REST interface.
 
-> **Runs anywhere.** With no AWS credentials present it transparently falls back
-> to a deterministic demo provider so you can clone, run, and click around in
-> under a minute. The live AWS code path is the real implementation and is
-> selected automatically the moment credentials exist.
+> **Runs anywhere, including a public URL.** One stateless container, no
+> database — deploy it in about five minutes ([guide](docs/DEPLOY.md)) or run it
+> locally. With no AWS credentials present it transparently falls back to a
+> deterministic demo provider, clearly labelled in the API and the UI, so you can
+> clone, run and click around in under a minute. The AWS code path is the real
+> implementation and is selected automatically the moment credentials exist.
 
 ```bash
 git clone https://github.com/ssambit635-svg/-Aws-dashboard-backend.git
@@ -42,7 +44,7 @@ tested without an AWS account).
 - [Architecture](#architecture)
 - [Why the demo provider exists](#why-the-demo-provider-exists)
 - [Testing](#testing)
-- [Docker](#docker)
+- [Running it & deploying it](#running-it--deploying-it)
 - [Known limitations](#known-limitations) · [Roadmap](#roadmap)
 
 ---
@@ -56,7 +58,7 @@ read if you are reviewing the repository.
 | --- | --- | --- |
 | **AWS integration** | `boto3` clients for S3, EC2, CloudWatch and Cost Explorer with bounded retries, explicit timeouts, paginators, and per-service error translation | Real cloud SDK usage, not a mock-up |
 | **Service architecture** | `providers/` (data sources) → `services/` (business logic) → `routers/` (HTTP). Routers contain no logic; providers know nothing about HTTP | Layered design, separation of concerns, dependency inversion |
-| **Testability** | The `CloudProvider` ABC lets the service layer run against fixtures, while the boto3 provider is verified with `botocore`'s `Stubber` against recorded AWS payloads. 172 tests, no network, no credentials | Designing for tests instead of bolting them on, and knowing how to test SDK code |
+| **Testability** | The `CloudProvider` ABC lets the service layer run against fixtures, while the boto3 provider is verified with `botocore`'s `Stubber` against recorded AWS payloads. 180 tests, no network, no credentials | Designing for tests instead of bolting them on, and knowing how to test SDK code |
 | **API design** | Typed Pydantic v2 models for every request and response; consistent `{data, meta}` envelope; cursor-free offset pagination; HTTP-semantic status codes | Contract-first API design, OpenAPI schema generation |
 | **Correctness** | Money is `Decimal`, never `float`; ISO-8601 dates; validated AWS ID formats; aggregates computed over the full set, not the current page | Attention to the details that actually break billing systems |
 | **Reliability** | TTL read-through cache, `/livez` + `/readyz` probes, typed error envelopes, graceful degradation on partial AWS failures, structured JSON logs with request IDs | Operability — the difference between a demo and a service |
@@ -282,7 +284,7 @@ rather than a fallback — the right setting for production.
 ## Testing
 
 ```bash
-make test        # 172 tests, ~2s, no network
+make test        # 180 tests, ~2s, no network
 make test-ui     # 49 dashboard checks in jsdom
 make cov         # coverage report
 make check       # lint + format + types + tests (fast, no node)
@@ -341,18 +343,48 @@ this project got both of those wrong.
 
 ---
 
-## Docker
+## Running it & deploying it
+
+The application is one stateless process: no database, no Redis, no message
+broker, no migrations. Configuration is entirely environment variables, and the
+cache is in-process. That is why every option below is the same container.
+
+| | Command | URL |
+| --- | --- | --- |
+| Local | `uvicorn app.main:app --reload` | `http://localhost:8000` |
+| Docker | `make docker-run` | `http://localhost:8000` |
+| Public demo | `make docker-run-public` | `http://localhost:8000`, no key needed |
+| Render | *Blueprint → `render.yaml`* | `https://cloud-control.onrender.com` |
+| Fly.io | `fly launch --copy-config && fly deploy` | `https://<app>.fly.dev` |
+| Any host | `docker run -p 8000:8000 ghcr.io/ssambit635-svg/cloud-control:1.0.0` | wherever you put it |
+
+### Why you cannot just deploy it and walk away
+
+The image defaults to `DASH_ENVIRONMENT=production`, and in production the app
+**refuses to start** if `DASH_API_KEY` is still the value committed in this
+repository — a public repo full of public keys authenticates everybody against
+your account's inventory and spend. You must pick one of two shapes:
 
 ```bash
-make docker-build
-docker run --rm -p 8000:8000 -e DASH_BOOTSTRAP_DASHBOARD=true cloud-control-api:1.0.0
-# or, with your local AWS profile mounted:
-docker compose up --build
+# A. Public read-only demo — no AWS account, deterministic demo data,
+#    "demo data" badge in the UI. Nothing secret exists, so nothing leaks.
+-e DASH_ENVIRONMENT=production -e DASH_AUTH_ENABLED=false
+
+# B. Real account, private — generated key, real credentials from a role.
+-e DASH_ENVIRONMENT=production -e DASH_API_KEY="$(openssl rand -base64 32)"
 ```
 
-Multi-stage build, no compiler in the final image, non-root (UID 10001),
-`HEALTHCHECK` against `/livez`, and one worker per container — scale with
-replicas.
+Full walkthroughs — Render, Fly, plain Docker/VPS, ECS Fargate with a task role,
+App Runner, GHCR publishing, health-check paths and a troubleshooting table:
+**[`docs/DEPLOY.md`](docs/DEPLOY.md)**.
+
+The dashboard's own Docker notes: multi-stage build, no compiler in the final
+image, non-root (UID 10001), `HEALTHCHECK` against `/livez`, one worker per
+container — scale with replicas. Tag `v1.0.0` and
+[`release.yml`](.github/workflows/release.yml) publishes a multi-arch image to
+GHCR with SBOM and provenance; no repository secrets required.
+
+---
 
 ---
 

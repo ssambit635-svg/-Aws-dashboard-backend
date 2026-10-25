@@ -1,0 +1,42 @@
+# Fly.io configuration — https://fly.io/docs/reference/configuration/
+#
+#   fly launch --no-deploy --copy-config --name cloud-control-<yourname>
+#   fly deploy
+#
+# This is the public demo shape. For a real deployment, see docs/DEPLOY.md:
+# set DASH_AUTH_ENABLED="true" and store the key with
+#   fly secrets set DASH_API_KEY=...
+
+app = "cloud-control"
+primary_region = "sin"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8000"
+  DASH_ENVIRONMENT = "production"
+  # Public read-only demo: fixture data only, so no secret is exposed.
+  DASH_AUTH_ENABLED = "false"
+  # No credentials present -> deterministic demo data, labelled in the UI.
+  DASH_PROVIDER_MODE = "auto"
+  DASH_LOG_LEVEL = "INFO"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "GET"
+    path = "/livez"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
+  cpus = 1

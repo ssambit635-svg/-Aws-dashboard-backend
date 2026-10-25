@@ -98,3 +98,94 @@ def test_routes_open_when_auth_disabled(client, monkeypatch):
     monkeypatch.setenv("DASH_AUTH_ENABLED", "false")
     get_settings.cache_clear()
     assert client.get("/api/v1/overview").status_code == 200
+
+
+# ── the production key guard ──────────────────────────────────────────────
+def test_production_refuses_the_shipped_development_key():
+    """The repo is public, so the default key authenticates everybody."""
+    from app.core.config import DEFAULT_API_KEY
+
+    with pytest.raises(ValidationError) as excinfo:
+        Settings(environment="production", api_key=DEFAULT_API_KEY)
+    message = str(excinfo.value)
+    assert "DASH_API_KEY" in message
+    # The error has to say how to fix it, not only that it is wrong.
+    assert "token_urlsafe" in message
+    assert "DASH_AUTH_ENABLED=false" in message
+
+
+def test_production_accepts_a_generated_key():
+    settings = Settings(environment="production", api_key="q" * 43)
+    assert settings.environment == "production"
+
+
+def test_production_allows_a_keyless_public_demo():
+    """Auth off means no secret to leak, so the public demo is legitimate."""
+    settings = Settings(environment="production", auth_enabled=False)
+    assert settings.effective_api_key is None
+
+
+def test_local_development_keeps_working_with_the_default_key():
+    from app.core.config import DEFAULT_API_KEY
+
+    # api_key passed explicitly: the test environment sets its own DASH_API_KEY,
+    # and env vars would otherwise win over the value under test.
+    assert Settings(environment="local", api_key=DEFAULT_API_KEY).api_key == DEFAULT_API_KEY
+
+
+def test_staging_is_not_held_to_the_production_guard():
+    """The guard is about public exposure; staging still needs a real key by
+    convention, but a developer running staging locally is not bricked."""
+    assert Settings(environment="staging").environment == "staging"
+
+
+def test_container_image_defaults_to_production():
+    """If the Dockerfile defaulted to local, the guard would never fire and a
+    deployed container would inject the development key into page source."""
+    from pathlib import Path
+
+    dockerfile = Path("Dockerfile").read_text(encoding="utf-8")
+    assert "DASH_ENVIRONMENT=production" in dockerfile
+    assert "DASH_ENVIRONMENT=local" not in dockerfile
+
+
+# ── deployment manifests stay in sync with Settings ───────────────────────
+def _deploy_env_names() -> set[str]:
+    import json
+    import re
+    from pathlib import Path
+
+    names: set[str] = set()
+
+    render = Path("render.yaml").read_text(encoding="utf-8")
+    names |= {m.group(1) for m in re.finditer(r"-\s*key:\s*([A-Z_]+)", render)}
+
+    fly = Path("fly.toml").read_text(encoding="utf-8")
+    names |= {m.group(1) for m in re.finditer(r"^\s*([A-Z][A-Z0-9_]+)\s*=", fly, re.MULTILINE)}
+
+    task = json.loads(Path("deploy/aws/task-definition.json").read_text(encoding="utf-8"))
+    for container in task["containerDefinitions"]:
+        names |= {item["name"] for item in container.get("environment", [])}
+        names |= {item["name"] for item in container.get("secrets", [])}
+
+    return {name for name in names if name.startswith("DASH_")}
+
+
+def _known_settings() -> set[str]:
+    return {f"dash_{name}".upper() for name in Settings.model_fields}
+
+
+def test_deploy_manifests_only_set_real_settings():
+    """A typo in a manifest is silent: the app boots and ignores the variable."""
+    unknown = _deploy_env_names() - _known_settings()
+    assert not unknown, f"deploy manifests set settings that do not exist: {sorted(unknown)}"
+
+
+def test_deploy_manifests_cover_the_settings_that_matter_in_production():
+    configured = _deploy_env_names()
+    for required in {
+        "DASH_ENVIRONMENT",
+        "DASH_AUTH_ENABLED",
+        "DASH_PROVIDER_MODE",
+    }:
+        assert required in configured, f"{required} is not set by any deploy manifest"
