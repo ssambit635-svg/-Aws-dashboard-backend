@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="Cloud Control — real-time AWS cost, storage, compute and alert observability." />
+  <title>Cloud Control — AWS Observability</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%234f8cff'/%3E%3Cpath d='M10 20a4 4 0 0 1 .6-8 5.5 5.5 0 0 1 10.6 1.4A3.5 3.5 0 0 1 21 20z' fill='%230a0c10'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/static/css/app.css" />
+  <script>
+    window.__BOOTSTRAP__ = __DASHBOARD_BOOTSTRAP__;
+  </script>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- ── Rail ─────────────────────────────────────────────────────── -->
+    <aside class="rail" aria-label="Primary">
+      <div class="rail-brand" title="Cloud Control">
+        <svg viewBox="0 0 32 32" width="30" height="30" aria-hidden="true">
+          <rect width="32" height="32" rx="9" fill="url(#brandGrad)"/>
+          <path d="M10 21a4 4 0 0 1 .6-8 5.6 5.6 0 0 1 10.8 1.5A3.6 3.6 0 0 1 21.4 21z" fill="#080a0e"/>
+          <defs>
+            <linearGradient id="brandGrad" x1="0" y1="0" x2="32" y2="32">
+              <stop offset="0" stop-color="#5b9bff"/><stop offset="1" stop-color="#2dd4bf"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+
+      <nav class="rail-nav" id="rail-nav">
+        <button class="rail-item is-active" data-target="sec-overview" title="Overview (1)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 9h8V3h-8z"/></svg>
+          <span>Overview</span>
+        </button>
+        <button class="rail-item" data-target="sec-storage" title="Storage (2)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c4.4 0 8 1.1 8 2.5S16.4 8 12 8 4 6.9 4 5.5 7.6 3 12 3zm8 6.2v3.3c0 1.4-3.6 2.5-8 2.5s-8-1.1-8-2.5V9.2C5.3 10.3 8.5 11 12 11s6.7-.7 8-1.8zm0 6v3.3c0 1.4-3.6 2.5-8 2.5s-8-1.1-8-2.5v-3.3c1.3 1.1 4.5 1.8 8 1.8s6.7-.7 8-1.8z"/></svg>
+          <span>Storage</span>
+        </button>
+        <button class="rail-item" data-target="sec-compute" title="Compute (3)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v4H4zm0 6h16v4H4zm0 6h16v4H4zM6 6h2v.01H6zm0 6h2v.01H6zm0 6h2v.01H6z"/></svg>
+          <span>Compute</span>
+        </button>
+        <button class="rail-item" data-target="sec-alerts" title="Alerts (4)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a6 6 0 0 0-6 6v4l-2 3v1h16v-1l-2-3V8a6 6 0 0 0-6-6zm0 20a3 3 0 0 0 3-3H9a3 3 0 0 0 3 3z"/></svg>
+          <span>Alerts</span>
+          <i class="rail-badge" id="rail-alert-count" hidden>0</i>
+        </button>
+        <button class="rail-item" data-target="sec-billing" title="Billing (5)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16v16H4zm2 3v3h12V7zm0 5v2h3v-2zm5 0v2h3v-2zm5 0v2h2v-2zm-10 4v2h3v-2zm5 0v2h3v-2zm5 0v2h2v-2z"/></svg>
+          <span>Billing</span>
+        </button>
+      </nav>
+
+      <div class="rail-foot">
+        <button class="rail-item rail-ghost" id="btn-palette" title="Command palette (⌘K)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3a3 3 0 0 1 3 3v12a3 3 0 1 1-3-3h6a3 3 0 1 1-3 3V6a3 3 0 1 1 3 3H6a3 3 0 0 1 3-3zM6 15a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm12 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM6 6a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm12 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z"/></svg>
+          <span>⌘K</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- ── Main ─────────────────────────────────────────────────────── -->
+    <div class="workspace">
+      <header class="topbar">
+        <div class="topbar-left">
+          <div class="crumbs">
+            <span class="crumb-root">cloud-control</span>
+            <span class="crumb-sep">/</span>
+            <span class="crumb" id="crumb-section">overview</span>
+          </div>
+          <div class="topbar-sub">
+            <span class="dot dot-live" id="provider-dot"></span>
+            <span id="provider-label">connecting…</span>
+            <span class="sep">•</span>
+            <span id="region-label">—</span>
+            <span class="sep">•</span>
+            <span id="env-label">—</span>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <div class="clock" id="clock" title="Local time">
+            <span class="clock-time">--:--:--</span>
+            <span class="clock-zone">local</span>
+          </div>
+
+          <button class="btn btn-icon" id="btn-toggle-live" title="Toggle auto-refresh (Space)" aria-pressed="true">
+            <span class="live-ring" id="live-ring"><svg viewBox="0 0 36 36"><circle class="ring-bg" cx="18" cy="18" r="15"/><circle class="ring-fg" id="ring-fg" cx="18" cy="18" r="15"/></svg></span>
+            <span class="btn-text">Auto</span>
+          </button>
+
+          <button class="btn btn-icon" id="btn-refresh" title="Refresh now (R)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
+            <span class="btn-text">Refresh</span>
+          </button>
+
+          <a class="btn btn-icon btn-ghost" href="/docs" target="_blank" rel="noopener" title="OpenAPI docs">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h9l5 5v13H5zm9 1.5V9h4.5zM8 12h8v1.6H8zm0 3.4h8V17H8z"/></svg>
+            <span class="btn-text">API</span>
+          </a>
+
+          <button class="btn btn-icon btn-ghost" id="btn-export" title="Export JSON snapshot">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10l3-3 1.4 1.4L12 16l-4.4-4.6L9 10l3 3V3zM5 18h14v3H5z"/></svg>
+            <span class="btn-text">Export</span>
+          </button>
+        </div>
+      </header>
+
+      <div class="errorbar" id="errorbar" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 1 21h22zM11 9h2v6h-2zm0 8h2v2h-2z"/></svg>
+        <span id="errorbar-text">Something went wrong.</span>
+        <button class="btn btn-sm" id="btn-retry">Retry</button>
+      </div>
+
+      <main class="content" id="content">
+        <!-- Overview -->
+        <section class="section" id="sec-overview">
+          <div class="section-head">
+            <h1>Overview</h1>
+            <div class="section-meta">
+              <span class="pill" id="range-pill">last 30 days</span>
+              <span class="pill pill-quiet" id="last-updated">—</span>
+            </div>
+          </div>
+
+          <div class="kpi-grid" id="kpis" aria-live="polite"></div>
+
+          <div class="grid grid-3-1">
+            <article class="panel panel-chart">
+              <header class="panel-head">
+                <div>
+                  <h2>Daily spend</h2>
+                  <p class="panel-sub">Total cost per day, stacked by service</p>
+                </div>
+                <div class="segmented" id="trend-range" role="tablist">
+                  <button data-days="7">7D</button>
+                  <button data-days="30" class="is-active">30D</button>
+                  <button data-days="90">90D</button>
+                </div>
+              </header>
+              <div class="chart-wrap" id="trend-chart">
+                <div class="skeleton skeleton-chart"></div>
+              </div>
+              <div class="legend" id="trend-legend"></div>
+            </article>
+
+            <div class="stack">
+              <article class="panel panel-gauge">
+                <header class="panel-head"><h2>Budget</h2></header>
+                <div class="gauge-body">
+                  <div class="gauge-ring" id="budget-ring"></div>
+                  <div class="gauge-legend" id="budget-legend"></div>
+                </div>
+              </article>
+
+              <article class="panel panel-health">
+                <header class="panel-head">
+                  <h2>Health</h2>
+                  <span class="pill pill-quiet" id="health-pill">—</span>
+                </header>
+                <div class="health-body">
+                  <div class="score" id="health-score">—</div>
+                  <ul class="health-list" id="health-list"></ul>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <div class="grid grid-2">
+            <article class="panel">
+              <header class="panel-head">
+                <div>
+                  <h2>Cost by service</h2>
+                  <p class="panel-sub">Month to date, unblended cost</p>
+                </div>
+              </header>
+              <div class="table-wrap" id="services-table"></div>
+            </article>
+            <article class="panel">
+              <header class="panel-head">
+                <div>
+                  <h2>Service mix</h2>
+                  <p class="panel-sub">Share of month-to-date spend</p>
+                </div>
+              </header>
+              <div class="donut-wrap" id="donut"></div>
+            </article>
+          </div>
+        </section>
+
+        <!-- Storage -->
+        <section class="section" id="sec-storage">
+          <div class="section-head">
+            <h1>Storage</h1>
+            <div class="section-meta" id="storage-meta"></div>
+          </div>
+          <article class="panel">
+            <header class="panel-head">
+              <div>
+                <h2>S3 buckets</h2>
+                <p class="panel-sub">Object storage inventory, posture and estimated cost</p>
+              </div>
+              <div class="toolbar">
+                <label class="field">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2a8 8 0 1 1-4.9 14.3l-3.4 3.4-1.4-1.4 3.4-3.4A8 8 0 0 1 10 2zm0 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12z"/></svg>
+                  <input type="search" id="bucket-search" placeholder="Filter buckets" />
+                </label>
+              </div>
+            </header>
+            <div class="table-wrap" id="buckets-table"></div>
+          </article>
+        </section>
+
+        <!-- Compute -->
+        <section class="section" id="sec-compute">
+          <div class="section-head">
+            <h1>Compute</h1>
+            <div class="section-meta" id="compute-meta"></div>
+          </div>
+          <article class="panel">
+            <header class="panel-head">
+              <div>
+                <h2>EC2 fleet</h2>
+                <p class="panel-sub">Instance inventory with live CloudWatch utilisation</p>
+              </div>
+              <div class="toolbar">
+                <div class="chips" id="instance-filters"></div>
+                <label class="field">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2a8 8 0 1 1-4.9 14.3l-3.4 3.4-1.4-1.4 3.4-3.4A8 8 0 0 1 10 2zm0 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12z"/></svg>
+                  <input type="search" id="instance-search" placeholder="Filter instances" />
+                </label>
+              </div>
+            </header>
+            <div class="table-wrap" id="instances-table"></div>
+          </article>
+        </section>
+
+        <!-- Alerts -->
+        <section class="section" id="sec-alerts">
+          <div class="section-head">
+            <h1>Alerts</h1>
+            <div class="section-meta" id="alerts-meta"></div>
+          </div>
+          <article class="panel">
+            <header class="panel-head">
+              <div>
+                <h2>CloudWatch alarms</h2>
+                <p class="panel-sub">Metric alarms, thresholds and current state</p>
+              </div>
+              <div class="toolbar">
+                <div class="chips" id="alarm-filters"></div>
+              </div>
+            </header>
+            <div class="table-wrap" id="alarms-table"></div>
+          </article>
+        </section>
+
+        <!-- Billing -->
+        <section class="section" id="sec-billing">
+          <div class="section-head">
+            <h1>Billing</h1>
+            <div class="section-meta" id="billing-meta"></div>
+          </div>
+
+          <div class="grid grid-2">
+            <article class="panel">
+              <header class="panel-head">
+                <div>
+                  <h2>Month-to-date breakdown</h2>
+                  <p class="panel-sub">Actual vs projected month-end cost per service</p>
+                </div>
+              </header>
+              <div class="table-wrap" id="billing-table"></div>
+            </article>
+
+            <article class="panel">
+              <header class="panel-head">
+                <div>
+                  <h2>Spend velocity</h2>
+                  <p class="panel-sub">Cumulative spend against a linear budget burn</p>
+                </div>
+              </header>
+              <div class="chart-wrap chart-wrap-sm" id="velocity-chart"></div>
+            </article>
+          </div>
+
+          <article class="panel">
+            <header class="panel-head">
+              <div>
+                <h2>Cost driver ranking</h2>
+                <p class="panel-sub">Services ordered by month-to-date spend</p>
+              </div>
+            </header>
+            <div class="bars" id="service-bars"></div>
+          </article>
+        </section>
+
+        <footer class="foot">
+          <div class="foot-left">
+            <span id="foot-provider">provider —</span>
+            <span class="sep">•</span>
+            <span id="foot-cache">cache —</span>
+            <span class="sep">•</span>
+            <span id="foot-request">req —</span>
+          </div>
+          <div class="foot-right">
+            <span id="foot-version">v—</span>
+            <span class="sep">•</span>
+            <button class="linkish" id="btn-shortcuts">shortcuts <kbd>?</kbd></button>
+          </div>
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  <!-- ── Command palette ─────────────────────────────────────────────── -->
+  <div class="overlay" id="palette" hidden>
+    <div class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+      <div class="palette-input">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2a8 8 0 1 1-4.9 14.3l-3.4 3.4-1.4-1.4 3.4-3.4A8 8 0 0 1 10 2zm0 2a6 6 0 1 0 0 12 6 6 0 0 0 0-12z"/></svg>
+        <input id="palette-input" placeholder="Jump to a section or run a command…" autocomplete="off" />
+        <kbd>esc</kbd>
+      </div>
+      <ul class="palette-list" id="palette-list"></ul>
+    </div>
+  </div>
+
+  <!-- ── Shortcuts modal ─────────────────────────────────────────────── -->
+  <div class="overlay" id="shortcuts" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts">
+      <header class="modal-head">
+        <h2>Keyboard shortcuts</h2>
+        <button class="btn btn-icon btn-ghost" id="btn-shortcuts-close">esc</button>
+      </header>
+      <div class="shortcut-grid">
+        <div><kbd>R</kbd><span>Refresh data</span></div>
+        <div><kbd>Space</kbd><span>Toggle auto-refresh</span></div>
+        <div><kbd>⌘K</kbd><span>Command palette</span></div>
+        <div><kbd>/</kbd><span>Focus filter</span></div>
+        <div><kbd>1</kbd>–<kbd>5</kbd><span>Jump to section</span></div>
+        <div><kbd>E</kbd><span>Export snapshot</span></div>
+        <div><kbd>?</kbd><span>This dialog</span></div>
+        <div><kbd>esc</kbd><span>Close overlay</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/charts.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
