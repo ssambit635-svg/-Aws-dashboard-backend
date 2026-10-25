@@ -3,7 +3,7 @@
 [![CI](https://github.com/ssambit635-svg/-Aws-dashboard-backend/actions/workflows/ci.yml/badge.svg)](https://github.com/ssambit635-svg/-Aws-dashboard-backend/actions/workflows/ci.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13-3776AB?logo=python&logoColor=white)](https://www.python.org)
 [![License: MIT](https://img.shields.io/badge/license-MIT-2dd4bf.svg)](LICENSE)
-[![Tests](https://img.shields.io/badge/tests-180%20%2B%2049%20DOM-34d399.svg)](#testing)
+[![Tests](https://img.shields.io/badge/tests-196%20%2B%2049%20DOM-34d399.svg)](#testing)
 
 A production-shaped, read-only **AWS control-plane API** with a zero-dependency
 observability dashboard. It reads real account state through **boto3** —
@@ -58,7 +58,7 @@ read if you are reviewing the repository.
 | --- | --- | --- |
 | **AWS integration** | `boto3` clients for S3, EC2, CloudWatch and Cost Explorer with bounded retries, explicit timeouts, paginators, and per-service error translation | Real cloud SDK usage, not a mock-up |
 | **Service architecture** | `providers/` (data sources) → `services/` (business logic) → `routers/` (HTTP). Routers contain no logic; providers know nothing about HTTP | Layered design, separation of concerns, dependency inversion |
-| **Testability** | The `CloudProvider` ABC lets the service layer run against fixtures, while the boto3 provider is verified with `botocore`'s `Stubber` against recorded AWS payloads. 180 tests, no network, no credentials | Designing for tests instead of bolting them on, and knowing how to test SDK code |
+| **Testability** | The `CloudProvider` ABC lets the service layer run against fixtures, while the boto3 provider is verified with `botocore`'s `Stubber` against recorded AWS payloads. 196 tests, no network, no credentials | Designing for tests instead of bolting them on, and knowing how to test SDK code |
 | **API design** | Typed Pydantic v2 models for every request and response; consistent `{data, meta}` envelope; cursor-free offset pagination; HTTP-semantic status codes | Contract-first API design, OpenAPI schema generation |
 | **Correctness** | Money is `Decimal`, never `float`; ISO-8601 dates; validated AWS ID formats; aggregates computed over the full set, not the current page | Attention to the details that actually break billing systems |
 | **Reliability** | TTL read-through cache, `/livez` + `/readyz` probes, typed error envelopes, graceful degradation on partial AWS failures, structured JSON logs with request IDs | Operability — the difference between a demo and a service |
@@ -284,7 +284,7 @@ rather than a fallback — the right setting for production.
 ## Testing
 
 ```bash
-make test        # 180 tests, ~2s, no network
+make test        # 196 tests, ~2s, no network
 make test-ui     # 49 dashboard checks in jsdom
 make cov         # coverage report
 make check       # lint + format + types + tests (fast, no node)
@@ -354,7 +354,7 @@ cache is in-process. That is why every option below is the same container.
 | Local | `uvicorn app.main:app --reload` | `http://localhost:8000` |
 | Docker | `make docker-run` | `http://localhost:8000` |
 | Public demo | `make docker-run-public` | `http://localhost:8000`, no key needed |
-| Render | *Blueprint → `render.yaml`* | `https://cloud-control.onrender.com` |
+| Render | *New → Blueprint → `render.yaml`* | `https://cloud-control.onrender.com` |
 | Fly.io | `fly launch --copy-config && fly deploy` | `https://<app>.fly.dev` |
 | Any host | `docker run -p 8000:8000 ghcr.io/ssambit635-svg/cloud-control:1.0.0` | wherever you put it |
 
@@ -374,9 +374,25 @@ your account's inventory and spend. You must pick one of two shapes:
 -e DASH_ENVIRONMENT=production -e DASH_API_KEY="$(openssl rand -base64 32)"
 ```
 
+Render needs **no edits** — the image reads `$PORT` (Render sets 10000), the
+blueprint health-checks `/livez`, and the image's own `HEALTHCHECK` follows the
+same variable instead of assuming 8000.
+
 Full walkthroughs — Render, Fly, plain Docker/VPS, ECS Fargate with a task role,
 App Runner, GHCR publishing, health-check paths and a troubleshooting table:
 **[`docs/DEPLOY.md`](docs/DEPLOY.md)**.
+
+"Deployable" is checked, not claimed. `make render-check` boots the app with the
+environment a PaaS injects (`PORT=10000`, `production`) and walks every route in
+the OpenAPI schema plus every asset the page requests:
+
+```bash
+make render-check                  # locally, in the deploy shape
+python scripts/render_smoke.py --url https://your-deployment   # against a real URL
+```
+
+Both run in CI — a Docker-free `deploy-shape` job on every push, and the `docker`
+job against the built image including the container's own health status.
 
 The dashboard's own Docker notes: multi-stage build, no compiler in the final
 image, non-root (UID 10001), `HEALTHCHECK` against `/livez`, one worker per

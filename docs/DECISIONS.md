@@ -246,3 +246,42 @@ production deploy now *needs* one secret, which is the point. CI asserts both
 halves of the contract on the real image: production + default key must exit
 non-zero, and production + auth disabled must serve `/api/v1/overview` without
 a key and must not leak the key into page source.
+
+---
+
+## ADR-014 — "Deployable" is a test, not a sentence
+
+**Status:** accepted
+
+**Context.** Telling someone "this deploys on Render" is cheap. The three ways it
+is usually wrong are invisible locally, because a laptop runs the app in almost
+the opposite way to a platform:
+
+* the platform assigns the port (`$PORT=10000`), the laptop uses 8000;
+* the platform runs `DASH_ENVIRONMENT=production`, the laptop runs `local`, which
+  changes startup checks and what is injected into the page;
+* the platform terminates TLS and forwards `X-Forwarded-*`, which the laptop
+  never sends.
+
+Found in exactly this way while preparing the Render path: the container's
+`HEALTHCHECK` was pinned to `127.0.0.1:8000` while `CMD` bound `$PORT`. On Render
+the service would have served traffic perfectly and been marked unhealthy — the
+kind of contradiction that looks like a platform problem and wastes an hour.
+
+**Decision.** `scripts/render_smoke.py` boots the app the way the container does
+(`$PORT`, production, proxy headers, no AWS credentials) or points at a real URL,
+then walks every path in the OpenAPI schema, every asset `index.html` requests,
+and asserts the development key is absent from the served HTML. It runs in three
+places: `make render-check` before pushing, a Docker-free `deploy-shape` CI job,
+and the `docker` job against the built image (including
+`docker inspect .State.Health.Status`).
+
+The manifests themselves are tested as code in `tests/test_deploy_manifests.py`:
+each one is applied to `Settings` as-is, and the health-check paths must exist in
+the app's route table.
+
+**Consequences.** A change that breaks deployment now fails on the pull request
+rather than at 2 a.m. in a Render log. The cost is one script and 16 tests, and
+the smoke script duplicates a little of what the API tests already assert — a
+deliberate trade, because it verifies the *shipped artefact*, not the source
+tree.

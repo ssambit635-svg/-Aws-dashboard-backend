@@ -59,19 +59,55 @@ of preference: put it behind your own SSO/reverse proxy; or share
 
 ## Option 1 — Render (fastest, free tier)
 
-The repository contains a [`render.yaml`](../render.yaml) blueprint.
+Short answer: **yes, this deploys on Render with no edits.** Here is exactly what
+happens, and the three details that make it work.
 
-1. Push this repository to GitHub (already done).
-2. Render dashboard → **New** → **Blueprint** → pick the repo.
-3. Apply. Render reads the Dockerfile, builds, and health-checks `/livez`.
+1. Render dashboard → **New** → **Blueprint** → select this repository.
+2. Render finds [`render.yaml`](../render.yaml), reads `dockerfilePath: ./Dockerfile`,
+   and shows one service on the **free** plan.
+3. **Apply.** First build is 2–4 minutes (dependency install dominates; the
+   layers cache afterwards, so later deploys are ~40 seconds).
+
+| What Render needs | Where it is handled |
+| --- | --- |
+| A `$PORT`-aware server | `CMD` runs `uvicorn … --port ${PORT:-8000}`; Render sets `PORT=10000` |
+| A health check | `render.yaml` → `healthCheckPath: /livez`, a cheap route with no AWS calls |
+| Container health that doesn't contradict it | The image's own `HEALTHCHECK` reads `$PORT` too |
+| TLS-terminating proxy awareness | `--proxy-headers --forwarded-allow-ips='*'` |
+| Readiness at boot | The app has no migrations and no database; `/livez` answers as soon as uvicorn binds |
+
+Verify it is genuinely up (not just "deployed"):
+
+```bash
+HOST=https://cloud-control.onrender.com       # your service URL
+curl -s $HOST/livez                            # {"status":"alive"}
+curl -s $HOST/readyz                           # {"status":"ready", "provider": {"mode": "mock"}}
+curl -s $HOST/api/v1/overview | head -c 120    # works: auth is off in the demo shape
+open $HOST                                     # dashboard, with the demo-data badge
+```
+
+The same check, run against any URL, is in the repository:
+
+```bash
+python scripts/render_smoke.py --url $HOST
+```
+
+It walks every route in the OpenAPI schema and every asset the page requests,
+and fails if the development key reaches the served HTML. `make render-check`
+does the same against a locally booted server using Render's port and
+environment, so a breaking change is caught before you push, not after.
 
 Notes:
 
-- The free plan **sleeps after ~15 minutes of inactivity**; the first request
-  afterwards takes ~30 seconds to wake. Fine for a portfolio link, not for a
-  demo you are presenting live.
-- Render injects `PORT`; the image's `CMD` already respects it.
+- The free plan **sleeps after ~15 minutes of inactivity**; the next request
+  takes ~30 seconds to wake. Fine for a portfolio link, not for a talk.
+  Paid instance types remove this; so does a cron job that pings `/livez`.
+- Free instances get 512 MB. This app uses well under 100 MB.
 - Custom domain and HTTPS are handled by Render.
+- `autoDeploy: true` means every push to `main` redeploys. That is what you want
+  for a demo; remove the line if you would rather deploy by hand.
+- Blueprints are applied from the **default branch**, so `render.yaml` must be
+  on `main` (it is).
 
 ## Option 2 — Fly.io
 
@@ -186,6 +222,14 @@ docker run -p 8000:8000 \
 ---
 
 ## Post-deploy checklist
+
+The one-command version, which covers every item below except the AWS-specific
+warnings:
+
+```bash
+python scripts/render_smoke.py --url https://your-deployment
+```
+
 
 ```bash
 HOST=https://your-deployment
