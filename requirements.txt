@@ -1,2 +1,8 @@
-﻿fastapi
-uvicorn
+# Runtime dependencies — pinned for reproducible builds.
+# Source of truth is pyproject.toml; this file exists for platforms and tooling
+# that still expect a requirements.txt.
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+pydantic==2.14.1
+pydantic-settings==2.16.1
+boto3==1.43.118

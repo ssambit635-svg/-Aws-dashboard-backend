@@ -1,0 +1,7 @@
+-r requirements.txt
+
+pytest==9.1.1
+httpx==0.28.1
+ruff==0.17.2
+mypy==2.4.0
+types-boto3==1.43.118

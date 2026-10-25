@@ -1,0 +1,40 @@
+# Local development stack.
+#
+#   docker compose up --build      → http://localhost:8000
+#   docker compose up --build -d   → detached
+#
+# Mounts AWS credentials read-only so the container can use your local profile.
+# Comment the volume out to run in demo (mock) mode instead.
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cloud-control-api:1.0.0
+    container_name: cloud-control-api
+    ports:
+      - "8000:8000"
+    environment:
+      # boto3 resolves ~/.aws from $HOME, which the non-root user needs set.
+      HOME: /home/app
+      DASH_ENVIRONMENT: local
+      DASH_LOG_LEVEL: INFO
+      # Local runs get the key injected into the dashboard for zero-setup demoing.
+      DASH_BOOTSTRAP_DASHBOARD: "true"
+      DASH_API_KEY: ${DASH_API_KEY:-local-dev-key}
+      DASH_PROVIDER_MODE: ${DASH_PROVIDER_MODE:-auto}
+      DASH_AWS_REGION: ${DASH_AWS_REGION:-us-east-1}
+      DASH_MONTHLY_BUDGET: ${DASH_MONTHLY_BUDGET:-8000}
+    volumes:
+      - ~/.aws:/home/app/.aws:ro
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/livez', timeout=2).status == 200 else 1)"
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
