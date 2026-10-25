@@ -70,9 +70,19 @@ export async function bootDashboard({ intercept, errors = [] } = {}) {
   window.alert = () => {};
   window.prompt = () => API_KEY;
 
-  window.fetch = intercept
-    ? async (url, options) => intercept(String(url), options)
-    : (url, options) => fetch(String(url).startsWith("http") ? url : BASE + url, options);
+  // One place decides how the page reaches the API. Suites must never build
+  // their own URL — hardcoding a port here is how the CI job broke: it serves
+  // on :8123, so a hand-written "localhost:8000" only passed on a machine that
+  // happened to have another server on that port.
+  const liveFetch = (url, options) =>
+    fetch(String(url).startsWith("http") ? url : BASE + url, options);
+
+  window.fetch = intercept ? async (url, options) => intercept(String(url), options) : liveFetch;
+
+  /** Restore real network access after an intercepting suite is finished. */
+  const restoreFetch = () => {
+    window.fetch = liveFetch;
+  };
 
   for (const script of ["/static/js/api.js", "/static/js/charts.js", "/static/js/app.js"]) {
     window.eval(await getText(script));
@@ -81,7 +91,7 @@ export async function bootDashboard({ intercept, errors = [] } = {}) {
   document.dispatchEvent(new window.Event("DOMContentLoaded", { bubbles: true }));
   await sleep(2200);
 
-  return { window, document, dom, sleep };
+  return { window, document, dom, sleep, restoreFetch };
 }
 
 /** Minimal assertion recorder that prints a readable report and sets exit code. */

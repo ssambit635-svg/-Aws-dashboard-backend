@@ -298,7 +298,7 @@ async function securitySuite() {
 /* ── Suite 4: unauthenticated / failing API ────────────────────────────── */
 async function failureSuite() {
   const errors = [];
-  const { window, document, sleep } = await bootDashboard({
+  const { document, sleep, restoreFetch } = await bootDashboard({
     errors,
     intercept: async () => ({
       ok: false,
@@ -323,8 +323,7 @@ async function failureSuite() {
   );
 
   // A retry that succeeds must clear the banner (no stale errors).
-  window.fetch = (url, options) =>
-    fetch(String(url).startsWith("http") ? url : `http://localhost:8000${url}`, options);
+  restoreFetch();
   document.getElementById("btn-retry").click();
   await sleep(1600);
   check("a successful retry clears the banner", document.getElementById("errorbar").hidden);
