@@ -663,6 +663,16 @@ td.strong { color: var(--text); font-weight: 500; }
 }
 .foot-left, .foot-right { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
+/* ── [hidden] must actually hide ──────────────────────────────────────── */
+/* The `hidden` attribute is only a UA-stylesheet rule (`display: none`), and
+   author declarations beat UA ones. So any element we also style with
+   `display: flex/grid` — .overlay, .errorbar — stayed visible even after JS set
+   `el.hidden = true`. Both overlays were therefore permanent, full-screen,
+   click-swallowing layers stacked on top of the dashboard: the page looked
+   black (two 0.72-alpha backdrops), the shortcuts dialog could not be closed,
+   and no button underneath could be clicked. Guard it globally. */
+[hidden] { display: none !important; }
+
 /* ── Overlays ─────────────────────────────────────────────────────────── */
 .overlay {
   position: fixed;

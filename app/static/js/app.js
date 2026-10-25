@@ -982,6 +982,7 @@
   let paletteResults = COMMANDS;
 
   function openPalette() {
+    el("shortcuts").hidden = true;
     el("palette").hidden = false;
     const input = el("palette-input");
     input.value = "";
@@ -1046,11 +1047,24 @@
     });
   }
 
+  // Only one overlay at a time: they are full-screen and both take the keyboard,
+  // so stacking them leaves the user looking at a modal they cannot dismiss.
+  function openShortcuts() {
+    closePalette();
+    el("shortcuts").hidden = false;
+    el("btn-shortcuts-close").focus();
+  }
+  function closeShortcuts() {
+    el("shortcuts").hidden = true;
+    const active = document.activeElement;
+    if (active && active !== document.body && typeof active.blur === "function") active.blur();
+  }
+
   function bindShortcuts() {
-    el("btn-shortcuts").addEventListener("click", () => (el("shortcuts").hidden = false));
-    el("btn-shortcuts-close").addEventListener("click", () => (el("shortcuts").hidden = true));
+    el("btn-shortcuts").addEventListener("click", openShortcuts);
+    el("btn-shortcuts-close").addEventListener("click", closeShortcuts);
     el("shortcuts").addEventListener("click", (e) => {
-      if (e.target === el("shortcuts")) el("shortcuts").hidden = true;
+      if (e.target === el("shortcuts")) closeShortcuts();
     });
 
     document.addEventListener("keydown", (e) => {
@@ -1063,14 +1077,14 @@
       }
       if (e.key === "Escape") {
         closePalette();
-        el("shortcuts").hidden = true;
+        closeShortcuts();
         if (typing) document.activeElement.blur();
         return;
       }
       if (el("palette").hidden === false) return;
       if (typing) return;
 
-      if (e.key === "?") { el("shortcuts").hidden = false; return; }
+      if (e.key === "?") { openShortcuts(); return; }
       if (e.key.toLowerCase() === "r") { loadAll().then(() => toast("Data refreshed")); return; }
       if (e.key.toLowerCase() === "e") { exportSnapshot(); return; }
       if (e.key === " ") {
