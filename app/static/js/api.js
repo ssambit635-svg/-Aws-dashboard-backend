@@ -89,13 +89,14 @@
 
     if (dedupe) {
       inflight.set(key, promise);
-      promise.finally(() => inflight.delete(key));
+      // Do not use `promise.finally(...)`: it returns a derived promise that
+      // rejects with the same error and is never handled, producing an
+      // "Uncaught (in promise)" on every failed request. Handle both outcomes
+      // explicitly on a branch that is not returned to the caller.
+      const release = () => inflight.delete(key);
+      promise.then(release, release);
     }
     return promise;
-  }
-
-  function withTimeoutSignal() {
-    return new AbortController();
   }
 
   window.API = {
@@ -103,7 +104,6 @@
     getKey: () => apiKey,
     setKey,
     request,
-    withTimeoutSignal,
     ApiError,
     hasKey: () => Boolean(apiKey),
     endpoints: {

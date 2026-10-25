@@ -89,10 +89,11 @@
     return `${Math.round(secs / 86400)}d ago`;
   }
 
+  // Escapes every character that can break out of text or an attribute value.
+  // Applied to all API-derived strings before they reach innerHTML.
+  const ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;", "`": "&#96;" };
   function esc(s) {
-    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
-    );
+    return String(s == null ? "" : s).replace(/[&<>"'`]/g, (c) => ESCAPES[c]);
   }
 
   const $ = (sel, root) => (root || document).querySelector(sel);
@@ -113,6 +114,8 @@
     hiddenSeries: new Set(),
     loading: false,
     lastUpdated: null,
+    renderFailures: [],
+    keyPrompts: 0,
     autoRefresh: true,
     countdown: 60,
     filters: { bucket: "", instance: "", instanceState: "all", alarmState: "all" },
@@ -222,38 +225,67 @@
       <p>No data to plot</p><small>Waiting for a successful response</small></div>`;
   }
 
+  // Ask for a key at most twice per page load. Without this cap a wrong key
+  // produces an infinite prompt -> retry -> 401 -> prompt loop: a dialog storm
+  // the user cannot escape from.
+  const KEY_PROMPT_LIMIT = 2;
+
   function offerKey() {
-    if (!API.hasKey()) {
-      const key = window.prompt("This API requires a key. Paste the value of DASH_API_KEY:");
-      if (key) {
-        API.setKey(key.trim());
-        loadAll();
-      }
-    } else {
-      const key = window.prompt("Authentication failed. Enter a different API key:");
-      if (key) {
-        API.setKey(key.trim());
-        loadAll();
-      }
+    if (state.keyPrompts >= KEY_PROMPT_LIMIT) {
+      showError(
+        "Authentication keeps failing. Verify DASH_API_KEY on the server, then reload."
+      );
+      return;
     }
+    state.keyPrompts += 1;
+
+    const prompt = API.hasKey()
+      ? "Authentication failed. Enter a different API key:"
+      : "This API requires a key. Paste the value of DASH_API_KEY:";
+    const entered = window.prompt(prompt);
+    if (!entered || !entered.trim()) {
+      showError("No API key provided. Reload with ?key=YOUR_KEY or press ⌘K → Set API key.");
+      return;
+    }
+
+    const candidate = entered.trim();
+    if (candidate === API.getKey()) {
+      // Same key, same outcome. Do not spin.
+      showError("That key was rejected. Check DASH_API_KEY on the server.");
+      return;
+    }
+
+    API.setKey(candidate);
+    loadAll();
   }
 
   /* ── 5. Renderers ────────────────────────────────────────────────────── */
 
   function renderAll() {
-    renderHeader();
-    renderKPIs();
-    renderTrend();
-    renderBudget();
-    renderHealth();
-    renderServices();
-    renderDonut();
-    renderBuckets();
-    renderInstances();
-    renderAlarms();
-    renderBilling();
-    renderBars();
-    renderFooter();
+    // Each panel renders independently. A malformed payload — a proxy error
+    // page, a version skew, a truncated body — must cost one panel, not the
+    // whole dashboard. Failures are collected and surfaced once.
+    const steps = [
+      renderHeader, renderKPIs, renderTrend, renderBudget, renderHealth,
+      renderServices, renderDonut, renderBuckets, renderInstances,
+      renderAlarms, renderBilling, renderBars, renderFooter,
+    ];
+    const failed = [];
+    for (const step of steps) {
+      try {
+        step();
+      } catch (err) {
+        failed.push(step.name);
+      }
+    }
+    // Replaced, not appended: a panel that recovers must stop being reported.
+    state.renderFailures = failed;
+    if (failed.length) {
+      showError(
+        `Unexpected response shape — could not render ${failed.join(", ")}. ` +
+          "Check /api/v1/system/info."
+      );
+    }
     el("last-updated").textContent = state.lastUpdated
       ? "updated " + state.lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
       : "—";
@@ -279,7 +311,7 @@
 
   function renderKPIs() {
     const o = state.overview;
-    if (!o) return;
+    if (!o || !Array.isArray(o.kpis) || !o.kpis.length) return;
     const grid = el("kpis");
     grid.innerHTML = "";
 
@@ -363,7 +395,7 @@
   function renderBudget() {
     const o = state.overview;
     const b = state.billing;
-    if (!o || !b) return;
+    if (!o || !b || !b.total || !b.budget) return;
     const used = num(o.budget_used_pct);
     const pct = Math.min(used, 100);
     const color = used > 100 ? "#f76a6a" : used > 85 ? "#fbbf24" : "#34d399";
@@ -391,9 +423,9 @@
 
   function renderHealth() {
     const o = state.overview;
-    const buckets = (state.buckets && state.buckets.items) || [];
-    const alarms = (state.alarms && state.alarms.items) || [];
-    if (!o) return;
+    const buckets = (state.buckets && Array.isArray(state.buckets.items) && state.buckets.items) || [];
+    const alarms = (state.alarms && Array.isArray(state.alarms.items) && state.alarms.items) || [];
+    if (!o || typeof o.health_score !== "number") return;
 
     const score = o.health_score;
     const cls = score >= 85 ? "" : score >= 65 ? "warn" : "critical";
@@ -449,7 +481,7 @@
 
   function renderServices() {
     const b = state.billing;
-    if (!b) return;
+    if (!b || !Array.isArray(b.services)) return;
     const rows = b.services;
     const wrap = el("services-table");
     const max = Math.max(...rows.map((r) => num(money(r.cost))), 1);
@@ -482,7 +514,7 @@
 
   function renderDonut() {
     const b = state.billing;
-    if (!b) return;
+    if (!b || !Array.isArray(b.services) || !b.services.length) return;
     const wrap = el("donut");
     wrap.innerHTML = "";
     const top = b.services.slice(0, 6);
@@ -508,7 +540,7 @@
 
   function renderBuckets() {
     const data = state.buckets;
-    if (!data) return;
+    if (!data || !Array.isArray(data.items)) return;
     const wrap = el("buckets-table");
     const q = state.filters.bucket.toLowerCase();
     let rows = data.items.filter((b) => !q || b.name.toLowerCase().includes(q) || b.region.includes(q));
@@ -572,7 +604,7 @@
 
   function renderInstances() {
     const data = state.instances;
-    if (!data) return;
+    if (!data || !Array.isArray(data.items)) return;
     const wrap = el("instances-table");
     const { instance, instanceState } = state.filters;
 
@@ -598,6 +630,7 @@
     rows = sortRows(rows, state.sort.instances, {
       name: (i) => (i.tags && i.tags.Name) || i.id,
       cpu: (i) => i.cpu_utilization_pct,
+      memory: (i) => i.memory_used_pct,
       cost: (i) => num(money(i.monthly_cost)),
       state: (i) => i.state,
     });
@@ -625,8 +658,8 @@
         ${sortHeader("state", "State", state.sort.instances)}
         <th>Type</th>
         <th>Zone</th>
-        <th class="num">CPU</th>
-        <th class="num">Memory</th>
+        ${sortHeader("cpu", "CPU", state.sort.instances, "num")}
+        ${sortHeader("memory", "Memory", state.sort.instances, "num")}
         <th>IP</th>
         <th>Launched</th>
         ${sortHeader("cost", "Est. / mo", state.sort.instances, "num")}
@@ -660,7 +693,7 @@
 
   function renderAlarms() {
     const data = state.alarms;
-    if (!data) return;
+    if (!data || !Array.isArray(data.items)) return;
     const wrap = el("alarms-table");
     const counts = data.by_state || {};
     const states = ["all", "ALARM", "OK", "INSUFFICIENT_DATA"];
@@ -732,7 +765,7 @@
 
   function renderBilling() {
     const b = state.billing;
-    if (!b) return;
+    if (!b || !Array.isArray(b.services)) return;
     el("billing-meta").innerHTML = `
       <span class="pill">${fmtDateShort(b.period_start)} – ${fmtDateShort(b.period_end)}</span>
       <span class="pill pill-quiet">${esc(b.currency)}</span>`;
@@ -744,7 +777,7 @@
         <th class="num">Actual</th>
         <th class="num">Projected</th>
         <th class="num">Δ</th>
-        <th class="num">Usage hrs</th>
+        <th class="num" title="Mixed units — GB-months for storage, hours for compute, invocations for Lambda">Usage</th>
       </tr></thead>
       <tbody>${b.services.map((r) => {
         const d = fmtDelta(r.delta_pct);
@@ -756,17 +789,22 @@
           <td class="num">${fmtMoney(cost)}</td>
           <td class="num" style="color:${over ? "var(--amber)" : "var(--text-2)"}">${fmtMoney(proj)}</td>
           <td class="num"><span class="kpi-delta ${d.cls}" style="font-size:10.5px">${d.text}</span></td>
-          <td class="num muted">${int.format(r.usage_hours)}</td>
+          <td class="num muted">${fmtNum(r.usage_quantity)}</td>
         </tr>`;
       }).join("")}</tbody></table>`;
 
-    // velocity chart: cumulative spend vs. linear budget pace
+    // Velocity chart: cumulative spend vs. budget pace for the same number of
+    // days. The budget is monthly, so the pace line is prorated by how much of
+    // the month the visible window covers — otherwise a 7-day view draws a
+    // staggeringly steep budget line and implies runaway spend.
     const t = state.trend;
-    const budget = num(money(b.budget));
+    const monthlyBudget = num(money(b.budget));
     if (t && t.points.length) {
+      const [year, month] = parseDate(t.points[0].date).toISOString().slice(0, 7).split("-").map(Number);
+      const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      const windowBudget = monthlyBudget * (t.points.length / daysInMonth);
       const points = t.points.map((p, i) => ({ date: p.date, value: num(money(p.total)), i }));
-      const scale = t.days ? 30 / t.days : 1;
-      cumulative(el("velocity-chart"), { points, budget: budget * scale }, {
+      cumulative(el("velocity-chart"), { points, budget: windowBudget }, {
         height: 220,
         formatMoney: fmtMoney,
         formatDate: fmtDateShort,
@@ -777,7 +815,7 @@
 
   function renderBars() {
     const b = state.billing;
-    if (!b) return;
+    if (!b || !Array.isArray(b.services)) return;
     const rows = b.services.slice(0, 8);
     const max = Math.max(...rows.map((r) => num(money(r.cost))), 1);
     el("service-bars").innerHTML = rows.map((r, i) => {
@@ -864,12 +902,7 @@
   function bindToolbar() {
     el("btn-refresh").addEventListener("click", () => loadAll().then(() => toast("Data refreshed")));
 
-    el("btn-toggle-live").addEventListener("click", (ev) => {
-      state.autoRefresh = !state.autoRefresh;
-      ev.currentTarget.setAttribute("aria-pressed", String(state.autoRefresh));
-      resetCountdown();
-      toast(state.autoRefresh ? "Auto-refresh on (60s)" : "Auto-refresh paused");
-    });
+    el("btn-toggle-live").addEventListener("click", () => toggleAutoRefresh());
 
     el("btn-export").addEventListener("click", exportSnapshot);
     el("btn-retry").addEventListener("click", () => loadAll());
@@ -899,6 +932,15 @@
       state.filters.instance = e.target.value;
       renderInstances();
     });
+  }
+
+  function toggleAutoRefresh() {
+    state.autoRefresh = !state.autoRefresh;
+    // Set the attribute on the button itself, not on whatever triggered this,
+    // so programmatic and keyboard paths keep aria-pressed accurate.
+    el("btn-toggle-live").setAttribute("aria-pressed", String(state.autoRefresh));
+    resetCountdown();
+    toast(state.autoRefresh ? "Auto-refresh on (60s)" : "Auto-refresh paused");
   }
 
   function exportSnapshot() {
@@ -948,6 +990,14 @@
     setTimeout(() => input.focus(), 30);
   }
   function closePalette() {
+    // Blur *before* hiding. An element inside a hidden ancestor is no longer
+    // focusable, so blurring afterwards is a no-op and `document.activeElement`
+    // stays on the invisible input — which keeps the "user is typing" guard
+    // armed and silently swallows every keyboard shortcut.
+    const active = document.activeElement;
+    if (active && active !== document.body && typeof active.blur === "function") {
+      active.blur();
+    }
     el("palette").hidden = true;
   }
 
@@ -1025,7 +1075,7 @@
       if (e.key.toLowerCase() === "e") { exportSnapshot(); return; }
       if (e.key === " ") {
         e.preventDefault();
-        el("btn-toggle-live").click();
+        toggleAutoRefresh();
         return;
       }
       if (e.key === "/") {

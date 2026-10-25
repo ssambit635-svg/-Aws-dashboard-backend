@@ -1,0 +1,13 @@
+{
+  "name": "cloud-control-ui-tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "DOM-level tests for the Cloud Control dashboard. Runs the real HTML/CSS/JS in jsdom against a live API.",
+  "scripts": {
+    "test": "node dashboard.test.mjs"
+  },
+  "devDependencies": {
+    "jsdom": "^30.1.3"
+  }
+}
