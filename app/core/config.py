@@ -34,7 +34,6 @@ class Settings(BaseSettings):
     app_name: str = "Cloud Control API"
     version: str = "1.0.0"
     environment: Environment = "local"
-    debug: bool = False
 
     # -- AWS --------------------------------------------------------------
     aws_region: str = "us-east-1"
@@ -57,8 +56,6 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:8000,http://127.0.0.1:8000"
     cost_currency: str = "USD"
     monthly_budget: float = 8000.0
-    trend_days_max: int = 90
-    page_size_max: int = 100
     log_level: str = "INFO"
 
     @property
@@ -67,8 +64,13 @@ class Settings(BaseSettings):
 
     @property
     def api_key_injected(self) -> bool:
-        """Whether the dashboard may receive the API key at render time."""
-        return self.bootstrap_dashboard and self.environment in {"local", "staging"}
+        """Whether the dashboard may receive the API key at render time.
+
+        Local development only. Any shared deployment must supply the key to the
+        browser by its own means (a login flow, a proxy that injects the header)
+        rather than having the server print it into the page source.
+        """
+        return self.bootstrap_dashboard and self.environment == "local"
 
     @property
     def effective_api_key(self) -> str | None:

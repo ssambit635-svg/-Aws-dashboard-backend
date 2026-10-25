@@ -14,7 +14,10 @@ class ServiceCost(BaseModel):
     cost: Money
     projected: Money
     delta_pct: float = Field(description="Percentage change vs. the comparison period")
-    usage_hours: int = Field(ge=0)
+    # Cost Explorer's UsageQuantity is a mixed bag: GB-months for S3, hours for
+    # EC2, invocations for Lambda. Exposing it as "hours" would be a lie, so the
+    # unit stays deliberately unspecified and the UI labels it "usage".
+    usage_quantity: float = Field(ge=0, description="Mixed-unit usage quantity from Cost Explorer")
     share_pct: float = Field(ge=0, le=100)
 
 

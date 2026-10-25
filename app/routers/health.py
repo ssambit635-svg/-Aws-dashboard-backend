@@ -30,6 +30,10 @@ def readyz(
     ctr: Container = Depends(get_container),
     settings: Settings = Depends(get_settings),
 ) -> HealthStatus:
+    # A degraded data source is reported, but the process is still ready to
+    # serve: returning 503 would make an orchestrator kill a container that can
+    # usefully answer /livez and /api/v1/system/info. Only report not-ready when
+    # the provider cannot be constructed at all, which is caught below.
     checks = ctr.provider.health()
     healthy = checks.get("provider") == "ok"
     if not healthy:

@@ -41,7 +41,13 @@ class Bucket(BaseModel):
         return f"{size:.1f} PB"
 
 
-InstanceState = Literal["running", "stopped", "pending", "stopping", "terminated"]
+# EC2 returns exactly these six values. Omitting "shutting-down" (as the first
+# draft did) makes pydantic reject the response and fails the entire /instances
+# endpoint with a 500 the moment any instance is being terminated. "unknown" is
+# a defensive bucket for states a future AWS API version might add.
+InstanceState = Literal[
+    "pending", "running", "shutting-down", "terminated", "stopping", "stopped", "unknown"
+]
 
 
 class Instance(BaseModel):

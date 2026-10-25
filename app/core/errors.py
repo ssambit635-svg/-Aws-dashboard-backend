@@ -9,6 +9,8 @@ which lets a frontend branch on ``code`` instead of scraping prose.
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -42,9 +44,7 @@ class UpstreamAWSError(AppError):
     code = "upstream_aws_error"
 
 
-class NotFoundError(AppError):
-    status_code = status.HTTP_404_NOT_FOUND
-    code = "not_found"
+log = logging.getLogger(__name__)
 
 
 def _request_id(request: Request) -> str:
@@ -96,7 +96,18 @@ def register_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(Exception)
     async def _handle_unexpected(request: Request, exc: Exception) -> JSONResponse:
-        # Deliberately opaque: internals never leak to the client.
+        # Logged with the request ID so the opaque client response is still
+        # traceable in the logs. Internals never leak to the client.
+        log.exception(
+            "unhandled exception",
+            extra={
+                "extra_fields": {
+                    "request_id": _request_id(request),
+                    "path": request.url.path,
+                    "exception_type": type(exc).__name__,
+                }
+            },
+        )
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content=_payload("internal_error", "An unexpected error occurred", request),

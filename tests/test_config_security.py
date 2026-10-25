@@ -49,6 +49,12 @@ def test_api_key_injection_is_refused_in_production():
     assert local.api_key_injected is True
 
 
+def test_api_key_injection_is_refused_in_staging():
+    """Staging is a shared environment: the key must not reach page source."""
+    staging = Settings(environment="staging", bootstrap_dashboard=True)
+    assert staging.api_key_injected is False
+
+
 def test_api_key_injection_can_be_disabled():
     settings = Settings(environment="local", bootstrap_dashboard=False)
     assert settings.api_key_injected is False
