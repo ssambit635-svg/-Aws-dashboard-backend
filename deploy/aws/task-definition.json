@@ -1,0 +1,60 @@
+{
+  "family": "cloud-control",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "runtimePlatform": {
+    "cpuArchitecture": "X86_64",
+    "operatingSystemFamily": "LINUX"
+  },
+  "executionRoleArn": "arn:aws:iam::AWS_ACCOUNT_ID:role/cloud-control-execution",
+  "taskRoleArn": "arn:aws:iam::AWS_ACCOUNT_ID:role/cloud-control-task",
+  "containerDefinitions": [
+    {
+      "name": "api",
+      "image": "AWS_ACCOUNT_ID.dkr.ecr.us-east-1.amazonaws.com/cloud-control:1.0.0",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "DASH_ENVIRONMENT", "value": "production" },
+        { "name": "DASH_PROVIDER_MODE", "value": "aws" },
+        { "name": "DASH_AWS_REGION", "value": "us-east-1" },
+        { "name": "DASH_COST_EXPLORER_REGION", "value": "us-east-1" },
+        { "name": "DASH_LOG_LEVEL", "value": "INFO" },
+        { "name": "DASH_MONTHLY_BUDGET", "value": "8000" }
+      ],
+      "secrets": [
+        {
+          "name": "DASH_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:AWS_ACCOUNT_ID:secret:cloud-control/api-key"
+        }
+      ],
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/livez', timeout=2).status == 200 else 1)\""
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 15
+      },
+      "stopTimeout": 10,
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/cloud-control",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "api",
+          "awslogs-create-group": "true"
+        }
+      }
+    }
+  ]
+}

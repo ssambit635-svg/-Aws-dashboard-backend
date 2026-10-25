@@ -218,3 +218,31 @@ shape it depends on before indexing into it.
 panel is missing instead of staring at a broken grid. The cost is a small amount
 of defensive code that the type system would otherwise provide — acceptable for
 a dependency-free frontend.
+
+---
+
+## ADR-013 — The app refuses to start in production with the repository's key
+
+**Status:** accepted
+
+**Context.** Deploying this is now a supported path, which means the image will
+run somewhere public. The image defaults to `DASH_ENVIRONMENT=production`, and
+the default `DASH_API_KEY` lives in `.env.example` — in a public repository.
+Every guide to "deploy your FastAPI app" shows `docker run -p 8000:8000`, and
+that command would have produced a live, authenticated-looking API whose key is
+in the source tree. The failure mode is silent: `/readyz` returns `ready`,
+`/docs` renders, and the account's inventory and spend cost data are readable by
+anyone who can find the repository.
+
+**Decision.** A `model_validator` rejects `environment=production` combined with
+`auth_enabled=true` and the default key, raising at startup with the exact
+remediation (generate a key, or set `DASH_AUTH_ENABLED=false` deliberately).
+The public-demo shape — `production` with auth disabled — remains valid, because
+then no secret exists to leak.
+
+**Consequences.** A copy-pasted deploy fails loudly in five seconds instead of
+exposing billing data indefinitely. The trade-off is that a legitimate
+production deploy now *needs* one secret, which is the point. CI asserts both
+halves of the contract on the real image: production + default key must exit
+non-zero, and production + auth disabled must serve `/api/v1/overview` without
+a key and must not leak the key into page source.

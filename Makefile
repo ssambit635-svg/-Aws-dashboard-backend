@@ -7,7 +7,7 @@ BIN := $(VENV)/bin
 PORT ?= 8000
 
 .DEFAULT_GOAL := help
-.PHONY: help venv install run dev test test-ui cov lint format format-check typecheck check check-all docker-build docker-run clean
+.PHONY: help venv install run dev test test-ui cov lint format format-check typecheck check check-all docker-build docker-run docker-run-public clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -55,8 +55,20 @@ check-all: check test-ui ## Everything, including the dashboard tests
 docker-build: ## Build the container image
 	docker build -t cloud-control-api:1.0.0 .
 
-docker-run: ## Run the container
-	docker run --rm -p $(PORT):8000 -e DASH_BOOTSTRAP_DASHBOARD=true cloud-control-api:1.0.0
+docker-run: ## Run the container locally (demo mode, no credentials needed)
+	# DASH_ENVIRONMENT=local so the page can bootstrap the dev key; the image
+	# otherwise defaults to production and refuses to start without a real
+	# DASH_API_KEY (see docs/DEPLOY.md).
+	docker run --rm -p $(PORT):8000 \
+		-e DASH_ENVIRONMENT=local \
+		-e DASH_BOOTSTRAP_DASHBOARD=true \
+		cloud-control-api:1.0.0
+
+docker-run-public: ## Run the container in the public read-only demo shape
+	docker run --rm -p $(PORT):8000 \
+		-e DASH_ENVIRONMENT=production \
+		-e DASH_AUTH_ENABLED=false \
+		cloud-control-api:1.0.0
 
 clean: ## Remove caches and build artefacts
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +

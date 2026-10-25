@@ -10,10 +10,15 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["local", "staging", "production"]
 ProviderMode = Literal["auto", "aws", "mock"]
+
+# The value shipped in .env.example. Fine locally, dangerous anywhere public:
+# it is in the repository, so it authenticates everybody.
+DEFAULT_API_KEY = "local-dev-key"
 
 
 class Settings(BaseSettings):
@@ -30,6 +35,31 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    @model_validator(mode="after")
+    def _refuse_default_key_in_production(self) -> Settings:
+        """Fail at startup rather than serving a public API with a known key.
+
+        ``DASH_ENVIRONMENT=production`` plus the default key would mean anyone
+        who has read this repository can read the account's inventory and cost
+        data. Deploying with a placeholder secret is one of the most common
+        production mistakes, and it is silent — the app looks healthy. So it is
+        a hard failure, with the two legitimate ways out spelled out.
+        """
+        if (
+            self.environment == "production"
+            and self.auth_enabled
+            and self.api_key == DEFAULT_API_KEY
+        ):
+            raise ValueError(
+                "DASH_API_KEY is still the development default while "
+                "DASH_ENVIRONMENT=production. Anyone who can read this "
+                "repository could read your account's inventory and cost data. "
+                'Generate a real key: python -c "import secrets; '
+                'print(secrets.token_urlsafe(32))" — or set '
+                "DASH_AUTH_ENABLED=false for a deliberately public read-only demo."
+            )
+        return self
+
     # -- Application ------------------------------------------------------
     app_name: str = "Cloud Control API"
     version: str = "1.0.0"
@@ -45,7 +75,7 @@ class Settings(BaseSettings):
     aws_timeout_seconds: int = 10
 
     # -- Security ---------------------------------------------------------
-    api_key: str = "local-dev-key"
+    api_key: str = DEFAULT_API_KEY
     auth_enabled: bool = True
     # Local-only convenience: inject the dev API key into the dashboard HTML so
     # `make run` works with zero setup. Refused outside local/staging.

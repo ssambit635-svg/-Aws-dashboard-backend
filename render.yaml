@@ -1,0 +1,33 @@
+# Render blueprint — https://render.com/docs/blueprint-spec
+#
+# Deploys the public read-only demo shape: no AWS account, no secrets,
+# deterministic fixture data, and a "demo data" badge in the UI so nobody can
+# mistake it for live billing.
+#
+# For a real deployment against your own account, set DASH_AUTH_ENABLED to
+# "true" and DASH_API_KEY to a generated secret (see docs/DEPLOY.md).
+services:
+  - type: web
+    name: cloud-control
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: oregon
+    healthCheckPath: /livez
+    autoDeploy: true
+    envVars:
+      - key: DASH_ENVIRONMENT
+        value: production
+      # Nothing secret is served: the payload is fixtures, so open read access
+      # is the honest setting for a public demo. Do not copy this line for a
+      # deployment holding real account data.
+      - key: DASH_AUTH_ENABLED
+        value: "false"
+      # No credentials in this environment, so the provider falls back to the
+      # demo data. Set to "aws" once a task role / credentials exist.
+      - key: DASH_PROVIDER_MODE
+        value: auto
+      - key: DASH_LOG_LEVEL
+        value: INFO
+      - key: DASH_MONTHLY_BUDGET
+        value: "8000"

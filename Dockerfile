@@ -17,6 +17,11 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 # ── Stage 2: runtime ───────────────────────────────────────────────────────
 FROM python:3.12-slim AS runtime
 
+# DASH_ENVIRONMENT=production is the right default for a deploy image: it
+# disables API-key injection into the page. Because of that, the app refuses to
+# start unless DASH_API_KEY is set to something other than the development
+# default, or DASH_AUTH_ENABLED=false is set deliberately. Failing at startup
+# is the point — see docs/DEPLOY.md.
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/venv/bin:$PATH" \
