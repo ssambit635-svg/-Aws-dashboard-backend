@@ -31,12 +31,12 @@ read if you are reviewing the repository.
 | --- | --- | --- |
 | **AWS integration** | `boto3` clients for S3, EC2, CloudWatch and Cost Explorer with bounded retries, explicit timeouts, paginators, and per-service error translation | Real cloud SDK usage, not a mock-up |
 | **Service architecture** | `providers/` (data sources) → `services/` (business logic) → `routers/` (HTTP). Routers contain no logic; providers know nothing about HTTP | Layered design, separation of concerns, dependency inversion |
-| **Testability** | The `CloudProvider` ABC lets the entire suite run against fixtures. 127 tests, no network, no credentials | Designing for tests instead of bolting them on |
+| **Testability** | The `CloudProvider` ABC lets the service layer run against fixtures, while the boto3 provider is verified with `botocore`'s `Stubber` against recorded AWS payloads. 167 tests, no network, no credentials | Designing for tests instead of bolting them on, and knowing how to test SDK code |
 | **API design** | Typed Pydantic v2 models for every request and response; consistent `{data, meta}` envelope; cursor-free offset pagination; HTTP-semantic status codes | Contract-first API design, OpenAPI schema generation |
 | **Correctness** | Money is `Decimal`, never `float`; ISO-8601 dates; validated AWS ID formats; aggregates computed over the full set, not the current page | Attention to the details that actually break billing systems |
 | **Reliability** | TTL read-through cache, `/livez` + `/readyz` probes, typed error envelopes, graceful degradation on partial AWS failures, structured JSON logs with request IDs | Operability — the difference between a demo and a service |
 | **Security** | API-key auth (constant-time compare) enforced by a dependency, restricted CORS, security headers, non-root container, secrets only via env, no key ever echoed in a response | Threat-aware defaults |
-| **Frontend engineering** | Hand-built SVG chart engine (stacked area with crosshair, donut, sparkline, cumulative), custom CSS design system, no framework or CDN | Understanding the platform instead of importing it |
+| **Frontend engineering** | Hand-built SVG chart engine (stacked area with crosshair, donut, sparkline, cumulative), custom CSS design system, no framework or CDN, and 49 DOM-level tests running the real page in jsdom | Understanding the platform instead of importing it, and testing it |
 | **UX polish** | Command palette (⌘K), keyboard shortcuts, skeleton loading, auto-refresh with countdown, sortable/filterable tables, CSV/JSON export, full responsive layout | Product sense |
 | **Delivery** | Multi-stage Dockerfile, non-root user, healthcheck, docker-compose, Makefile, GitHub Actions (lint + types + tests on 3 Python versions + container smoke test) | Shipping, not just committing |
 | **Documentation** | This README, `docs/ARCHITECTURE.md`, `docs/DECISIONS.md` (ADRs), full OpenAPI docs, docstrings that explain *why* | Communicating decisions |
@@ -257,9 +257,11 @@ rather than a fallback — the right setting for production.
 ## Testing
 
 ```bash
-make test        # 127 tests, <1s, no network
+make test        # 167 tests, ~2s, no network
+make test-ui     # 49 dashboard checks in jsdom
 make cov         # coverage report
-make check       # lint + format + types + tests (what CI runs)
+make check       # lint + format + types + tests (fast, no node)
+make check-all   # everything CI runs, including the dashboard tests
 ```
 
 The suite covers HTTP contracts, authentication and its ordering relative to
@@ -267,6 +269,40 @@ provider work, pagination maths, cache expiry and hit-rate accounting, provider
 selection and credential fallback, money rounding and serialisation, Pydantic
 validation boundaries, aggregate consistency (totals equal the sum of rows), and
 provider-failure → typed-error mapping.
+
+`tests/test_aws_provider.py` drives the real boto3 request/response cycle through
+`botocore.stub.Stubber` — recorded `DescribeInstances`, `GetMetricData`,
+`GetCostAndUsage` and S3 payloads, with no network and no credentials. It exists
+because the provider is the only code that can break silently in production, and
+it covers the specific failure modes that are easy to get wrong: paginated
+responses, `AccessDenied` on optional enrichment, multi-region batching, and
+every AWS enum that is not in our models.
+
+### Dashboard tests
+
+The frontend has tests too, because a hand-written chart engine and 1,500 lines
+of DOM code are exactly as likely to break as the backend:
+
+```bash
+make test-ui     # 49 checks; installs jsdom on first run, starts its own server
+```
+
+`tests/js/dashboard.test.mjs` executes the real `index.html`, CSS and JavaScript
+in **jsdom** against a live instance of the API — no Chromium download, no
+display server, a few seconds per run — and asserts in four suites:
+
+| Suite | What it proves |
+| --- | --- |
+| rendering | every panel, table and chart draws; no `NaN`/`undefined` reaches the DOM; the demo badge is honest |
+| interactions | sorting, filters, state chips, range switching, legend toggling, command palette, keyboard shortcuts, export, `aria-pressed` correctness |
+| security | a hostile resource name from the API (`<img onerror=…>`) is rendered as literal text and never becomes live DOM |
+| failure handling | a 401 shows an actionable banner, and a successful retry clears it rather than leaving a stale error |
+
+These tests earned their place: they found four defects that the backend suite
+could not see — a focus trap that silently disabled every keyboard shortcut, a
+renderer chain that a single malformed response could abort, an unhandled
+promise rejection on every failed request, and an infinite "enter API key"
+dialog loop. `make check-all` runs both suites.
 
 Tests are written against behaviour that would matter in production — for
 example `test_instance_ids_match_aws_format` and
@@ -301,6 +337,17 @@ Honesty is more useful than a longer feature list:
 - **Memory utilisation is only populated by the mock provider.** It requires the
   CloudWatch agent to publish `mem_used_percent`; without it, `0.0` is reported
   rather than a fabricated number.
+- **Bucket sizes only count the `StandardStorage` class.** `BucketSizeBytes` is
+  published per storage class, so an account full of Glacier objects will look
+  smaller than its S3 bill implies. Request metrics are also opt-in, so most
+  buckets report `0 B` until CloudWatch metrics are enabled.
+- **Encryption is assumed, not verified.** The S3 API exposes no single
+  "is this bucket encrypted" flag; SSE-S3 is the default for new buckets, so the
+  UI treats buckets as encrypted unless told otherwise. Verify with
+  `GetBucketEncryption` if you need certainty.
+- **`usage_quantity` is a mixed unit.** Cost Explorer returns GB-months for
+  storage, hours for compute and invocations for Lambda in the same field. It is
+  labelled "usage" rather than "hours", and should not be summed across services.
 - **The cache is per-process.** Correct for a read-through cache at this scale;
   a multi-replica deployment would want Redis and a shared TTL.
 - **API-key auth is single-tenant.** Fine for an internal ops tool; multi-user

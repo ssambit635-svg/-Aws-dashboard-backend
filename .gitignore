@@ -9,6 +9,10 @@ dist/
 venv/
 .python-version
 
+# ── Node (dashboard test harness only) ─────────────────────────────────────
+node_modules/
+package-lock.json
+
 # ── Tooling caches ─────────────────────────────────────────────────────────
 .pytest_cache/
 .mypy_cache/

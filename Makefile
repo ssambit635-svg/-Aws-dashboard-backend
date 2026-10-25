@@ -7,7 +7,7 @@ BIN := $(VENV)/bin
 PORT ?= 8000
 
 .DEFAULT_GOAL := help
-.PHONY: help venv install run dev test cov lint format format-check typecheck check docker-build docker-run clean
+.PHONY: help venv install run dev test test-ui cov lint format format-check typecheck check check-all docker-build docker-run clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
@@ -29,6 +29,9 @@ dev: ## Run the server with auto-reload
 test: ## Run the test suite
 	$(BIN)/pytest
 
+test-ui: ## Run the dashboard's DOM tests (needs node; starts its own server)
+	bash tests/js/run.sh
+
 cov: ## Run tests with a coverage report
 	$(BIN)/pytest --cov=app --cov-report=term-missing --cov-report=html
 
@@ -45,7 +48,9 @@ format-check: ## Verify formatting without changing files
 typecheck: ## Static type check
 	$(BIN)/mypy app
 
-check: lint format-check typecheck test ## Everything CI runs
+check: lint format-check typecheck test ## What CI requires (fast, no node)
+
+check-all: check test-ui ## Everything, including the dashboard tests
 
 docker-build: ## Build the container image
 	docker build -t cloud-control-api:1.0.0 .

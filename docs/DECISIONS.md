@@ -173,3 +173,48 @@ Dockerfile uses a multi-stage build, drops to UID 10001, and health-checks
 
 **Consequences.** Cache hit rate per replica is lower than with a shared cache;
 that is the trigger for moving to Redis (see ARCHITECTURE → Scaling notes).
+
+---
+
+## ADR-011 — AWS enums are coerced, never trusted
+
+**Status:** accepted
+
+**Context.** The instance model accepted five states. EC2 returns six. Any
+instance in `shutting-down` therefore failed validation and took the entire
+`/instances` endpoint down with a 500 — a bug that only appears on a live
+account, at the exact moment someone is terminating something.
+
+Two more of the same shape existed: `ComparisonOperator` has seven values, and
+treating anything other than `LessThanThreshold` as "above" silently inverted
+`LessThanOrEqualToThreshold` alarms; and `AlarmState` would raise on any state a
+future API version adds.
+
+**Decision.** Map AWS values onto our enums explicitly (`_coerce_instance_state`,
+`_normalise_comparison`, `_coerce_alarm_state`), degrading to a documented
+default instead of raising. Tests pin every branch against real payloads.
+
+**Consequences.** A dashboard degrades on unexpected input rather than 500ing,
+which is the correct behaviour for a monitoring tool: an unrecognised value
+should be visible, not fatal. The trade-off is that genuinely new AWS states
+render as `unknown` until someone adds them — visible, and easy to spot.
+
+---
+
+## ADR-012 — The dashboard renders each panel independently
+
+**Status:** accepted
+
+**Context.** `renderAll()` called twelve renderers in sequence. A 200 response
+with an unexpected shape — a proxy error page, a version skew, a truncated body
+— threw inside `renderKPIs` and aborted the remaining eleven, producing a page
+that was half-rendered with no explanation.
+
+**Decision.** Run each renderer in its own try/catch, collect failures, and show
+one error bar naming the panels that failed. Each renderer also validates the
+shape it depends on before indexing into it.
+
+**Consequences.** One malformed endpoint costs one panel. The user is told which
+panel is missing instead of staring at a broken grid. The cost is a small amount
+of defensive code that the type system would otherwise provide — acceptable for
+a dependency-free frontend.
